@@ -54,7 +54,15 @@ export default function CartToast() {
       <div
         role='status'
         className='anim-fade fixed z-[71] overflow-hidden rounded-[18px] border border-border-strong bg-surface-1 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.7)]'
-        style={{ bottom: 'calc(28px + env(safe-area-inset-bottom))', left: '50%', transform: 'translateX(-50%)', width: 'min(320px, calc(100vw - 24px))' }}>
+        /*
+         * Centred with auto margins, not `left:50% + translateX(-50%)`.
+         * `.anim-fade` animates transform and ends on `transform: none`, and an
+         * animation beats an inline style — so the -50% was thrown away and the
+         * card hung off to the right by half its width. Barely noticeable on a
+         * desktop, but on a phone a 320px card starting at the middle of the
+         * screen runs off the edge.
+         */
+        style={{ bottom: 'calc(28px + env(safe-area-inset-bottom))', left: 0, right: 0, marginInline: 'auto', width: 'min(320px, calc(100vw - 24px))' }}>
         <div className='flex items-center gap-3 p-3.5'>
           <div className='relative shrink-0'>
             <div className='h-[46px] w-[46px] rounded-xl bg-white bg-cover bg-center' style={toast.image ? { backgroundImage: `url("${toast.image}")` } : undefined} />
