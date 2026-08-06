@@ -57,7 +57,7 @@ export default function CartToast() {
         style={{ bottom: 'calc(28px + env(safe-area-inset-bottom))', left: '50%', transform: 'translateX(-50%)', width: 'min(320px, calc(100vw - 24px))' }}>
         <div className='flex items-center gap-3 p-3.5'>
           <div className='relative shrink-0'>
-            <div className='h-[46px] w-[46px] rounded-xl bg-white bg-cover bg-center' style={toast.image ? { backgroundImage: `url(${toast.image})` } : undefined} />
+            <div className='h-[46px] w-[46px] rounded-xl bg-white bg-cover bg-center' style={toast.image ? { backgroundImage: `url("${toast.image}")` } : undefined} />
             <div className='absolute -bottom-1.5 -right-1.5 flex h-[22px] w-[22px] items-center justify-center rounded-full border-[3px] border-surface-1 bg-white'>
               <Check className='h-[11px] w-[11px] text-black' strokeWidth={2.8} />
             </div>

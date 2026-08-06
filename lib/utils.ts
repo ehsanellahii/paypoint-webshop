@@ -167,7 +167,18 @@ export interface IMenuData {
 
 export const getImageURL = (imageKey: string): string => {
   if (!imageKey) return '';
-  return 'https://paypoint-web-storage.s3.eu-central-1.amazonaws.com/menu/' + imageKey;
+  /*
+   * Menu image keys are the uploaded filename, so most of them carry spaces,
+   * brackets, apostrophes and umlauts — "1744313086014_Lava Cake.jpg". Pasted
+   * into a URL raw, that is not a valid URL: CSS `url()` rejects it and drops
+   * the whole declaration, which is why the add-to-cart toast and the
+   * fly-to-cart thumbnail came out blank while the product grid was fine —
+   * next/image re-encodes the src itself and hid the problem.
+   *
+   * Encode per segment so a key that ever contains a folder still works.
+   */
+  const encodedKey = imageKey.split('/').map(encodeURIComponent).join('/');
+  return 'https://paypoint-web-storage.s3.eu-central-1.amazonaws.com/menu/' + encodedKey;
 };
 
 type FormattedAddOn = {

@@ -19,7 +19,7 @@ export default function MenuHero() {
         {/* Background */}
         <div
           className='absolute inset-0 bg-surface-3 bg-cover bg-center'
-          style={cover ? { backgroundImage: `url(${cover})`, filter: 'contrast(1.04) saturate(1.05) brightness(0.55)' } : { background: 'linear-gradient(135deg,#26262a,#141416)' }}
+          style={cover ? { backgroundImage: `url("${cover}")`, filter: 'contrast(1.04) saturate(1.05) brightness(0.55)' } : { background: 'linear-gradient(135deg,#26262a,#141416)' }}
         />
         <div className='absolute inset-0 bg-[rgba(15,15,17,0.32)]' />
 

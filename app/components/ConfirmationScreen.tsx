@@ -106,7 +106,7 @@ export default function ConfirmationScreen() {
               <div className='overflow-hidden rounded-[22px] border border-border bg-surface-1'>
                 <div
                   className='relative h-[240px] bg-surface-3 bg-cover bg-center'
-                  style={mapUrl ? { backgroundImage: `url(${mapUrl})` } : { background: 'linear-gradient(135deg,#26262a,#141416)' }}>
+                  style={mapUrl ? { backgroundImage: `url("${mapUrl}")` } : { background: 'linear-gradient(135deg,#26262a,#141416)' }}>
                   <div className='absolute left-4 top-4 inline-flex h-[34px] items-center gap-2 rounded-[11px] bg-[rgba(15,15,17,0.78)] px-3.5 text-[12.5px] font-bold text-success backdrop-blur'>
                     <span className='h-2 w-2 rounded-full bg-success shadow-[0_0_0_4px_rgba(70,209,127,0.25)]' />
                     {isPast ? (statusMeta?.label ?? '') : isScheduled ? (t.preorder ?? 'Pre-ordered') : (t.inProgress ?? 'In progress')}
@@ -184,7 +184,7 @@ export default function ConfirmationScreen() {
                 {order.items.map((item, i) => (
                   <div key={i} className='flex items-center gap-3'>
                     <div className='w-6 shrink-0 text-sm font-extrabold'>{item.qty}×</div>
-                    <div className='h-[42px] w-[42px] shrink-0 rounded-[11px] bg-white bg-cover bg-center' style={item.image ? { backgroundImage: `url(${item.image})` } : undefined} />
+                    <div className='h-[42px] w-[42px] shrink-0 rounded-[11px] bg-white bg-cover bg-center' style={item.image ? { backgroundImage: `url("${item.image}")` } : undefined} />
                     <div className='min-w-0 flex-1 text-[13.5px] font-semibold leading-tight text-[#e7e8ea]'>{item.name}</div>
                     <div className='shrink-0 text-sm font-bold'>{formatPrice(item.lineTotal)}</div>
                   </div>

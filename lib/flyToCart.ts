@@ -44,7 +44,9 @@ export function flyToCart(sourceEl: HTMLElement | null, imageUrl: string) {
     const fly = document.createElement('div');
     fly.style.cssText =
       `position:fixed;z-index:9999;left:${sx - 27}px;top:${sy - 27}px;width:54px;height:54px;` +
-      `border-radius:16px;background:#fff center/cover url(${imageUrl});` +
+      // Quoted: an unquoted url() with a space in it invalidates the whole
+      // `background` shorthand, and the square flies across empty.
+      `border-radius:16px;background:#fff center/cover url("${imageUrl}");` +
       `box-shadow:0 16px 34px rgba(0,0,0,.6),0 0 0 3px rgba(255,255,255,.85);pointer-events:none;will-change:transform,opacity;`;
     document.body.appendChild(fly);
 

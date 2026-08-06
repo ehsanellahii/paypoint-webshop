@@ -320,7 +320,7 @@ export default function CheckoutScreen() {
         <div className='relative h-[216px] overflow-hidden bg-[#16161a]'>
           <div
             className='absolute inset-0 bg-cover bg-center'
-            style={storeInfo?.settings?.logo ? { backgroundImage: `url(${storeInfo.settings.logo})`, filter: 'brightness(.45)' } : { background: 'linear-gradient(135deg,#26262a,#141416)' }}
+            style={storeInfo?.settings?.logo ? { backgroundImage: `url("${storeInfo.settings.logo}")`, filter: 'brightness(.45)' } : { background: 'linear-gradient(135deg,#26262a,#141416)' }}
           />
           <div className='absolute inset-0 bg-[rgba(18,18,20,0.62)]' />
 
@@ -373,7 +373,7 @@ export default function CheckoutScreen() {
             {/* Address + map */}
             {isDelivery && (
               <div className='overflow-hidden rounded-[18px] border border-border bg-surface-1'>
-                <div className='h-[140px] bg-card bg-cover bg-center' style={mapUrl ? { backgroundImage: `url(${mapUrl})` } : undefined} />
+                <div className='h-[140px] bg-card bg-cover bg-center' style={mapUrl ? { backgroundImage: `url("${mapUrl}")` } : undefined} />
                 <button onClick={() => setAddressOpen(true)} className='flex w-full items-center gap-3.5 p-4 text-left'>
                   <span className='flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-surface-3'>
                     <MapPin className='h-[19px] w-[19px]' />
