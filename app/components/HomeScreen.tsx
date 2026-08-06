@@ -1,0 +1,272 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+'use client';
+
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { Search, AlertCircle, X } from 'lucide-react';
+import ProductCard from '@/components/ProductCard';
+import ProductModal from '~/components/dialogs/ProductModal';
+import Footer from '@/components/Footer';
+import MenuHeader from '~/components/menu/MenuHeader';
+import MenuHero from '~/components/menu/MenuHero';
+import MenuMetaBar from '~/components/menu/MenuMetaBar';
+import CategoryNavBar from '~/components/menu/CategoryNavBar';
+import BottomBar from '~/components/Cart/BottomBar';
+import Cart from '~/components/Cart/Cart';
+import OrdersDialog from '~/components/Header/OrdersDialog';
+import UserDrawer from '~/components/Header/UserDrawer';
+import DeliveryAddressModal from '~/components/dialogs/DeliveryAddressModal';
+import CartToast from '~/components/menu/CartToast';
+import PreorderModal, { type PreorderSlot } from '~/components/menu/PreorderModal';
+import RestaurantInfoModal from '~/components/menu/RestaurantInfoModal';
+import ZoneCheckGate from '~/components/onboarding/ZoneCheckGate';
+import { savePreorderSlot } from '~/lib/preorderSlot';
+import { fetchMenuData, getCategories, getAllProducts } from '@/lib/api';
+import { IMenuData, MenuProduct, storage } from '~/lib/utils';
+import LoadingSkeleton from './LoadingSkeleton';
+import { useStore } from '~/contexts/store-context';
+import { useCart } from '~/contexts/cart-context';
+import { useAddress } from '~/contexts/address-context';
+import { useLanguage } from '~/contexts/language-context';
+
+export default function HomeScreen() {
+  const storeInfo = useStore();
+  const { t } = useLanguage();
+  const { totalItems, totalPrice, pruneUnavailable } = useCart();
+  const [prunedCount, setPrunedCount] = useState(0);
+  const { orderType, deliveryAddress, setDeliveryAddress, setOrderType } = useAddress();
+
+  const [menuData, setMenuData] = useState<IMenuData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState('');
+  const [query, setQuery] = useState('');
+  const [selectedProduct, setSelectedProduct] = useState<MenuProduct | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+
+  // Centralized shell dialogs
+  const [cartOpen, setCartOpen] = useState(false);
+  const [ordersOpen, setOrdersOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [addressOpen, setAddressOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [preorderOpen, setPreorderOpen] = useState(false);
+  const [scheduledSlot, setScheduledSlot] = useState<PreorderSlot | null>(null);
+  const [showGate, setShowGate] = useState(false);
+
+  // Delivery zone-check onboarding gate — show once per store when delivery is
+  // offered, no address is chosen yet, and the user hasn't seen it before.
+  useEffect(() => {
+    if (!storeInfo) return;
+    const slug = storeInfo.slug || 'default';
+    const deliveryAvailable = storeInfo.settings?.orderTypes?.delivery;
+    const isDineIn = !!storeInfo.tableInfo?.token;
+    const seen = storage.get<boolean>(`pos-intro-seen:${slug}`, false);
+    if (deliveryAvailable && !isDineIn && !deliveryAddress && !seen) setShowGate(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storeInfo]);
+
+  const dismissGate = (dismissForever?: boolean) => {
+    if (dismissForever) storage.set(`pos-intro-seen:${storeInfo?.slug || 'default'}`, true);
+    setShowGate(false);
+  };
+
+  useEffect(() => {
+    async function loadMenu() {
+      try {
+        setLoading(true);
+        const data = await fetchMenuData(storeInfo?.adminId, storeInfo?.storeId);
+        setMenuData(data);
+        const categories = getCategories(data);
+        if (categories.length > 0) setActiveCategory(categories[0].id);
+      } catch (err: any) {
+        setError(err?.message ?? 'Failed to load menu data');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadMenu();
+  }, [storeInfo?.adminId, storeInfo?.storeId]);
+
+  const productsByCategory = menuData ? getCategories(menuData) : [];
+  const allProducts = menuData ? getAllProducts(menuData) : [];
+
+  // Reconcile a persisted cart against the live menu. Items that were removed,
+  // deactivated, or left over from another store would otherwise fail the whole
+  // order server-side with "Invalid product" at checkout.
+  useEffect(() => {
+    if (!menuData) return;
+    const validIds = getAllProducts(menuData).map((p) => String(p.id ?? p._id));
+    const removed = pruneUnavailable(validIds);
+    if (removed > 0) setPrunedCount(removed);
+  }, [menuData, pruneUnavailable]);
+
+  const q = query.trim().toLowerCase();
+  const filteredCategories = useMemo(() => {
+    if (!q) return productsByCategory;
+    return productsByCategory
+      .map((cat) => ({
+        ...cat,
+        products: cat.products.filter((p) => p.name.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q) || cat.name.toLowerCase().includes(q)),
+      }))
+      .filter((cat) => cat.products.length > 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuData, q]);
+
+  useEffect(() => {
+    if (!menuData || q) return;
+    const options = { root: null, rootMargin: '-140px 0px -60% 0px', threshold: 0 };
+    observerRef.current = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) setActiveCategory(entry.target.id.replace('category-', ''));
+      });
+    }, options);
+    const els = document.querySelectorAll('[id^="category-"]');
+    els.forEach((el) => observerRef.current?.observe(el));
+    return () => observerRef.current?.disconnect();
+  }, [menuData, q]);
+
+  const handleProductClick = (product: MenuProduct) => {
+    setSelectedProduct(product);
+    setIsModalOpen(true);
+  };
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setTimeout(() => setSelectedProduct(null), 300);
+  };
+
+  // Cart open with delivery-address gate
+  const openCartGuarded = () => {
+    if (orderType === 'delivery' && !deliveryAddress && !storeInfo?.tableInfo?.token) {
+      setAddressOpen(true);
+      return;
+    }
+    setCartOpen(true);
+  };
+
+  if (loading) return <LoadingSkeleton />;
+
+  if (error || !menuData) {
+    return (
+      <div className='flex min-h-screen items-center justify-center bg-background'>
+        <div className='text-center'>
+          <p className='mb-4 text-brand-red'>{error || 'Failed to load menu'}</p>
+          <button onClick={() => window.location.reload()} className='rounded-lg bg-primary px-6 py-2 font-medium text-selected-text'>
+            {t.retry ?? 'Retry'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const noResults = !!q && filteredCategories.length === 0;
+
+  return (
+    <div className='min-h-screen bg-background text-foreground'>
+      <MenuHeader
+        query={query}
+        onQueryChange={setQuery}
+        cartCount={totalItems}
+        subtotal={totalPrice}
+        onOpenCart={openCartGuarded}
+        onOpenAccount={() => setAccountOpen(true)}
+        onOpenAddress={() => setAddressOpen(true)}
+      />
+
+      <MenuHero />
+      <MenuMetaBar
+        onRequireAddress={() => setAddressOpen(true)}
+        onOpenInfo={() => setInfoOpen(true)}
+        onOpenPreorder={() => setPreorderOpen(true)}
+        preorderLabel={scheduledSlot?.label}
+      />
+      <CategoryNavBar categories={productsByCategory} activeCategory={activeCategory} onCategoryClick={setActiveCategory} query={query} onQueryChange={setQuery} />
+
+      <main className='mx-auto max-w-[1320px] px-4 pb-28 pt-6 md:px-8 lg:pb-20' role='main'>
+        {prunedCount > 0 && (
+          <div className='anim-fade mb-5 flex items-center gap-3 rounded-2xl border border-[rgba(255,138,94,0.35)] bg-[rgba(255,138,94,0.1)] px-4 py-3.5'>
+            <AlertCircle className='h-5 w-5 shrink-0 text-[#ff8a5c]' />
+            <div className='min-w-0 flex-1 text-[13.5px] font-semibold text-white'>
+              {t.cartItemsRemoved ?? 'Some items are no longer available and were removed from your cart.'}
+            </div>
+            <button onClick={() => setPrunedCount(0)} aria-label={t.close} className='shrink-0 rounded-full p-1.5 text-muted-foreground transition hover:text-white'>
+              <X className='h-4 w-4' />
+            </button>
+          </div>
+        )}
+        {noResults ? (
+          <div className='flex flex-col items-center px-5 py-20 text-center'>
+            <div className='flex h-[78px] w-[78px] items-center justify-center rounded-full bg-surface-1'>
+              <Search className='h-9 w-9 text-[#55575c]' />
+            </div>
+            <div className='mt-5 text-lg font-extrabold'>{t.noResults ?? 'Nothing found'}</div>
+            <div className='mt-2 max-w-[320px] text-sm font-medium text-muted-foreground'>
+              {(t.noResultsFor ?? 'No dish found for') + ` “${query}”.`}
+            </div>
+            <button onClick={() => setQuery('')} className='mt-5 h-[46px] rounded-[14px] bg-primary px-5 text-sm font-extrabold text-selected-text'>
+              {t.resetSearch ?? 'Reset search'}
+            </button>
+          </div>
+        ) : (
+          filteredCategories.map((category) => (
+            <section key={category.id} id={`category-${category.id}`} className='mb-12 scroll-mt-[150px]' aria-labelledby={`heading-${category.id}`}>
+              <div className='mb-5 flex items-center gap-3'>
+                <span className='h-[26px] w-[5px] shrink-0 rounded-[3px] bg-primary' />
+                <h2 id={`heading-${category.id}`} className='m-0 text-2xl font-extrabold tracking-tight md:text-[27px]'>
+                  {category.name}
+                </h2>
+              </div>
+              <div className='grid grid-cols-1 gap-4 sm:grid-cols-2' role='list' aria-label={`${category.name} products`}>
+                {category.products.map((product) => (
+                  <ProductCard key={product.id} product={product} onClick={() => handleProductClick(product)} />
+                ))}
+              </div>
+            </section>
+          ))
+        )}
+      </main>
+
+      <Footer />
+
+      {/* Modals / overlays (centralized) */}
+      <ProductModal product={selectedProduct} isOpen={isModalOpen} onClose={handleCloseModal} />
+      <Cart isOpen={cartOpen} onOpenChange={setCartOpen} recommendations={allProducts} onOpenProduct={handleProductClick} />
+      <OrdersDialog open={ordersOpen} onOpenChange={setOrdersOpen} />
+      <UserDrawer open={accountOpen} onClose={() => setAccountOpen(false)} onOpenOrders={() => setOrdersOpen(true)} storeSlug={storeInfo?.slug} />
+      <DeliveryAddressModal
+        open={addressOpen}
+        onClose={() => setAddressOpen(false)}
+        onSelect={(addr) => {
+          setDeliveryAddress(addr);
+          setAddressOpen(false);
+        }}
+        googleApiKey={storeInfo?.posGoogleApiKey || ''}
+        onSuccess={() => {
+          if (orderType !== 'delivery') setOrderType('delivery');
+        }}
+      />
+
+      {/* Mobile floating cart bar */}
+      <BottomBar onOpenCart={openCartGuarded} />
+
+      {/* Global add-to-cart toast + confetti */}
+      <CartToast />
+
+      {/* Delivery zone-check onboarding gate */}
+      {showGate && <ZoneCheckGate onDone={dismissGate} />}
+
+      {/* Restaurant info + pre-order modals */}
+      <RestaurantInfoModal open={infoOpen} onClose={() => setInfoOpen(false)} />
+      <PreorderModal
+        open={preorderOpen}
+        onClose={() => setPreorderOpen(false)}
+        onConfirm={(slot) => {
+          setScheduledSlot(slot);
+          // Persisted so the checkout route picks it up after navigation.
+          savePreorderSlot(storeInfo?.slug || 'default', slot);
+        }}
+      />
+    </div>
+  );
+}
