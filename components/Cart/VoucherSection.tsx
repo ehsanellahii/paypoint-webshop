@@ -6,7 +6,7 @@ import { useLanguage } from '@/contexts/language-context';
 import { useCart } from '~/contexts/cart-context';
 import { API_BASE_URL, formatPrice, X_API_KEY } from '@/lib/api';
 import { useUser } from '~/contexts/user-context';
-import { getTranslatedVoucherApiErrorMessage } from '~/lib/errorMessges';
+import { getTranslatedVoucherApiErrorMessage } from '~/lib/errorMessages';
 import { useStore } from '~/contexts/store-context';
 
 type Props = {

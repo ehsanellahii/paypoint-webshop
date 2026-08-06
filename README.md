@@ -247,7 +247,7 @@ to a plain slice of the menu.
 
 **Voucher errors** are mapped from backend codes (`VOUCHER_NOT_FOUND`, `LIMIT_EXCEEDED`,
 `MINIMUM_ORDER_VALUE_NOT_MET`, `CUSTOMER_NOT_FOUND`) to translated copy in
-[`lib/errorMessges.ts`](lib/errorMessges.ts).
+[`lib/errorMessages.ts`](lib/errorMessages.ts).
 
 ---
 
@@ -369,4 +369,3 @@ Checklist before shipping a new environment:
   never reaches the client.
 - **The API base URL is selected by `NODE_ENV`,** which makes staging environments awkward.
   An explicit `NEXT_PUBLIC_API_BASE_URL` would be better.
-- **`lib/errorMessges.ts` is misspelled** (`errorMessges` → `errorMessages`).
