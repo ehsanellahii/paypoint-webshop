@@ -193,6 +193,7 @@ export interface IStoreInfo {
   slug: string;
   logo: string | null;
   timings: {
+    monday: { open: string; close: string };
     tuesday: { open: string; close: string };
     wednesday: { open: string; close: string };
     thursday: { open: string; close: string };
