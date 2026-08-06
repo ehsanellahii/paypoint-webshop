@@ -81,6 +81,22 @@ which re-attaches `?t=` to each destination.
 
 There are no route handlers — the app talks to the PayPoint integration API directly.
 
+### Link previews
+
+All three store routes build their `og:` and `twitter:` tags from one place,
+[`buildStoreMetadata`](lib/metadata.ts), so a link pasted into WhatsApp, iMessage, Slack or
+Twitter shows the store's own logo, name, city and address rather than a bare URL.
+
+The origin is read from the request headers rather than an environment variable, so
+localhost, a preview deploy and production each emit correct absolute URLs with nothing to
+keep in sync. The image is the same one the header renders (`settings.logo`, then `logo`),
+falling back to `/og-logo.png` — a card with no image collapses to a plain link in most
+chat apps.
+
+**A `localhost` link can never preview.** The crawlers fetch the page from their own
+servers and cannot reach your machine, so test with a public URL — a tunnel
+(`cloudflared tunnel --url http://localhost:3000`) or a deployment.
+
 Slugs that would collide with static assets (`favicon.ico`, `robots.txt`, `sitemap.xml`,
 `favicon.png`) are rejected with `notFound()` via the `BLOCKEDSLUGS` guard in
 [`app/[slug]/page.tsx`](app/[slug]/page.tsx).
@@ -104,8 +120,8 @@ npm install
 npm run dev          # http://localhost:3000/<store-slug>
 ```
 
-Create `.env.local` with the variable below, then open a store by slug, e.g.
-`http://localhost:3000/demo-store`. A bare `/` has no route.
+No `.env` file is needed. Open a store by slug, e.g. `http://localhost:3000/demo-store` —
+a bare `/` has no route.
 
 ### Scripts
 
@@ -122,12 +138,16 @@ Create `.env.local` with the variable below, then open a store by slug, e.g.
 
 ### Environment variables
 
-| Variable | Required | Description |
-| --- | --- | --- |
-| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | yes | Loads the Maps JS SDK with the `places` library in [`app/[slug]/layout.tsx`](app/[slug]/layout.tsx). Restrict it by HTTP referrer. |
+None are required. The app reads no `process.env` at runtime.
 
-Stores additionally return their own `adminGoogleApiKey` / `posGoogleApiKey` in the store
-payload; those are used for the per-store static map and geocoding.
+Google Maps keys come from the store payload, not the environment: `posGoogleApiKey` (with
+`adminGoogleApiKey` as a fallback) drives the Places SDK, geocoding and the static map, so
+each tenant bills its own key.
+
+The Maps SDK is loaded in exactly one place —
+[`useGoogleMaps`](hooks/useGoogleMaps.tsx), on demand, when a screen actually needs it. Do
+not add a `<Script>` tag for it: the SDK refuses to be included twice and logs
+*"You have included the Google Maps JavaScript API multiple times on this page"*.
 
 ### Remote image hosts
 
@@ -355,7 +375,8 @@ npm run build && npm start
 
 Checklist before shipping a new environment:
 
-1. Set `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`, referrer-restricted to the deployment domain.
+1. Check each tenant's `posGoogleApiKey` is set and referrer-restricted to the deployment
+   domain — without it the address gate and maps stay blank.
 2. Add every image host to `images.remotePatterns` in `next.config.ts`.
 3. Confirm the production API base URL in `lib/api.ts` matches the target backend.
 4. Point the store's slug at the deployment and verify one QR token end to end.

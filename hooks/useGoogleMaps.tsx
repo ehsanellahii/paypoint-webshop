@@ -8,6 +8,10 @@ declare global {
   }
 }
 
+const SCRIPT_ID = 'google-maps-script';
+/** Enough of the SDK URL to recognise a loader that is not this hook. */
+const MAPS_SRC = 'maps.googleapis.com/maps/api/js';
+
 export function useGoogleMaps(apiKey?: string) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string>('');
@@ -34,8 +38,26 @@ export function useGoogleMaps(apiKey?: string) {
       return;
     }
 
-    // Load script if not present
-    const existing = document.getElementById('google-maps-script') as HTMLScriptElement | null;
+    /*
+     * Loaded by something that did not record a key. Adopt it instead of
+     * fetching a second copy: the SDK refuses to be included twice and says so
+     * in the console. Matching only on `__gmapsKeyLoaded` above is what let the
+     * layout's own <Script> and this hook both load it.
+     */
+    if (window.google?.maps?.places) {
+      window.__gmapsKeyLoaded = apiKey;
+      setLoaded(true);
+      setError('');
+      return;
+    }
+
+    /*
+     * A request is already in flight — ours by id, or anyone else's by src.
+     * Wait on it rather than adding another.
+     */
+    const existing =
+      (document.getElementById(SCRIPT_ID) as HTMLScriptElement | null) ??
+      document.querySelector<HTMLScriptElement>(`script[src*="${MAPS_SRC}"]`);
 
     if (existing) {
       existing.addEventListener('load', () => setLoaded(true), { once: true });
@@ -47,7 +69,7 @@ export function useGoogleMaps(apiKey?: string) {
     setError('');
 
     const script = document.createElement('script');
-    script.id = 'google-maps-script';
+    script.id = SCRIPT_ID;
     script.async = true;
     script.defer = true;
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;

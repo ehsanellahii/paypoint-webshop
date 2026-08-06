@@ -1,13 +1,11 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter, Plus_Jakarta_Sans, Baloo_2, Kaushan_Script, Playfair_Display } from 'next/font/google';
 import '../globals.css';
 import { CartProvider } from '~/contexts/cart-context';
 import { LanguageProvider } from '@/contexts/language-context';
-import Script from 'next/script';
 import { AddressProvider } from '~/contexts/address-context';
 import { UserProvider } from '~/contexts/user-context';
 import DebugPersistError from '~/lib/DebugPersistError';
-import { getStoreData } from '~/lib/api';
 
 const inter = Inter({
   variable: '--font-inter',
@@ -47,47 +45,47 @@ const playfair = Playfair_Display({
   display: 'swap',
 });
 
-export async function generateMetadata({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ slug: string }>;
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}): Promise<Metadata> {
-  const { slug } = await params;
-  const sParams = await searchParams;
-  const store = await getStoreData(slug, sParams?.t as string);
+/*
+ * Static on purpose. Each page under this layout builds its own metadata from
+ * the store via `buildStoreMetadata`, so fetching the store a second time here
+ * bought nothing — and it was the fetch that logged "Failed to fetch store
+ * data" whenever a browser asked for /favicon.ico, which has no file and lands
+ * on this route. What is left is only the fallback for a request that never
+ * reaches a page.
+ */
+export const metadata: Metadata = {
+  title: 'Online Ordering',
+  description: 'Order food online',
+  icons: {
+    icon: [
+      { url: '/logo-light.svg', media: '(prefers-color-scheme: light)' },
+      { url: '/logo-dark.svg', media: '(prefers-color-scheme: dark)' },
+    ],
+  },
+};
 
-  return {
-    title: {
-      default: 'Order Online',
-      template: `%s - ${store?.brandName || 'Online Ordering'}`,
-    },
-    description: 'Order delicious burgers, wings, and more online',
-    openGraph: {
-      title: store?.brandName || 'Online Ordering',
-      description: store?.brandName ? `Order online from ${store?.brandName}` : 'Order delicious burgers, wings, and more online',
-      images: store?.logo ? [store.logo] : [],
-    },
-  };
-}
+export const viewport: Viewport = {
+  colorScheme: 'dark',
+};
 
 export default async function RootLayout({ children, params }: { children: React.ReactNode; params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   return (
     <html lang='en' className='dark'>
-      <head>
-        <link rel='icon' href='/logo-light.svg' media='(prefers-color-scheme: light)' />
-        <link rel='icon' href='/logo-dark.svg' media='(prefers-color-scheme: dark)' />
-        <meta name='color-scheme' content='dark' />
-      </head>
+      {/*
+       * No hand-written <head>: Next builds it from the Metadata API, so the
+       * icons and colour scheme are declared as `metadata` and `viewport`
+       * above. Keeping every head tag in one place means the next person
+       * adding one does not have to guess which of two mechanisms wins.
+       */}
       <body className={`${inter.variable} ${jakarta.variable} ${baloo.variable} ${kaushan.variable} ${playfair.variable} antialiased`}>
-        <Script
-          id='google-maps'
-          strategy='afterInteractive'
-          src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`}
-        />
-
+        {/*
+         * Maps is loaded by `useGoogleMaps`, not here. Loading it in the layout
+         * too meant two copies of the SDK on every page — Google warns about
+         * that in the console — and this one used the global env key, while
+         * every actual consumer wants the store's own `posGoogleApiKey`. It
+         * also downloaded the SDK on the menu page, which never draws a map.
+         */}
         <LanguageProvider>
           <UserProvider>
             <AddressProvider storeKey={slug || 'default'}>

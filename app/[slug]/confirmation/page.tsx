@@ -2,6 +2,7 @@ import React from 'react';
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getStoreData } from '~/lib/api';
+import { buildStoreMetadata } from '~/lib/metadata';
 import ThemeVars from '~/lib/ThemeVars';
 import StoreProvider from '~/contexts/store-context';
 import ConfirmationScreen from '~/app/components/ConfirmationScreen';
@@ -10,9 +11,12 @@ import { BLOCKEDSLUGS } from '../page';
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const store = await getStoreData(slug);
-  return {
+  return buildStoreMetadata({
+    store,
+    slug,
+    path: '/confirmation',
     title: store?.brandName ? `Order confirmed | ${store.brandName}` : 'Order confirmed',
-  };
+  });
 }
 
 const ConfirmationPage = async ({
@@ -27,6 +31,8 @@ const ConfirmationPage = async ({
 
   const { t: token } = await searchParams;
   const storeInfo = await getStoreData(slug, token as string);
+  // No store behind the slug — a 404 page, not an empty shell.
+  if (!storeInfo) notFound();
 
   return (
     <StoreProvider value={storeInfo}>

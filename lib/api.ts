@@ -1,6 +1,5 @@
 import { cache } from 'react';
 import { getImageURL, IMenuData, MenuCategory, MenuProduct } from './utils';
-import { BLOCKEDSLUGS } from '~/app/[slug]/page';
 
 export const API_BASE_URL = process.env.NODE_ENV === 'production' ? 'https://api.paypointpos.de/integration' : 'http://localhost:4000/integration';
 export const X_API_KEY = 'b3db8d621de8b0b9ab5351d05779f400:92b2cbc1e4bdcb0ab019ea16ae31d3fea304508e734672a5cf6661cded997f0c';
@@ -24,6 +23,17 @@ export const getStoreData = cache(async (slug: string, token?: string) => {
     headers: API_HEADERS,
     cache: 'no-store',
   });
+  /*
+   * A slug that names no store is a normal outcome, not a fault. Every asset
+   * the browser guesses at on a first visit — /favicon.ico, /apple-touch-icon.png —
+   * has no file to match and lands on this route, and throwing here turned each
+   * one into an error in the log while the real page rendered fine beside it.
+   * Callers turn null into notFound(); only a genuine backend fault should
+   * reach the error boundary.
+   */
+  if (response.status === 404) {
+    return null;
+  }
   if (!response.ok) {
     throw new Error('Failed to fetch store data');
   }

@@ -3,6 +3,7 @@ import HomeScreen from '../components/HomeScreen';
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getStoreData } from '~/lib/api';
+import { buildStoreMetadata } from '~/lib/metadata';
 import ThemeVars from '~/lib/ThemeVars';
 import StoreProvider from '~/contexts/store-context';
 
@@ -21,15 +22,7 @@ export async function generateMetadata({
   if (BLOCKEDSLUGS.has(slug)) notFound();
   const store = await getStoreData(slug, token as string);
 
-  return {
-    title: store?.brandName ? `${store.brandName} | Online Ordering` : 'Online Ordering',
-    description: store?.brandName ? `Order online from ${store.brandName}${store.city ? `, ${store.city}` : ''}` : 'Order food online',
-    openGraph: {
-      title: store?.brandName || 'Online Ordering',
-      description: `Order online from ${store?.brandName}`,
-      images: store?.logo ? [store.logo] : [],
-    },
-  };
+  return buildStoreMetadata({ store, slug });
 }
 
 export const BLOCKEDSLUGS = new Set(['favicon.ico', 'robots.txt', 'sitemap.xml', 'favicon.png']);
@@ -40,6 +33,8 @@ const page = async ({ params, searchParams }: { params: Promise<{ slug: string }
   if (BLOCKEDSLUGS.has(slug)) notFound();
   const { t: token } = await searchParams;
   const storeInfo = await getStoreData(slug, token as string);
+  // No store behind the slug — a 404 page, not an empty shell.
+  if (!storeInfo) notFound();
   const primaryColor = storeInfo?.settings?.themeColors?.primaryColor;
   const selectedColor = storeInfo?.settings?.themeColors?.selectedTextColor;
   return (
