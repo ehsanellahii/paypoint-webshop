@@ -66,6 +66,20 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   colorScheme: 'dark',
+  width: 'device-width',
+  initialScale: 1,
+  /*
+   * The till-style screens are laid out for the width they are given, so a
+   * stray double-tap or pinch just leaves the guest stranded mid-page.
+   *
+   * Worth knowing: iOS Safari has ignored `user-scalable=no` since iOS 10 and
+   * will still pinch-zoom on purpose. This stops double-tap zoom and the
+   * Android behaviour; the jump that actually annoys people on an iPhone —
+   * the page lurching when a field is focused — is handled by the 16px floor
+   * on form controls in globals.css.
+   */
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default async function RootLayout({ children, params }: { children: React.ReactNode; params: Promise<{ slug: string }> }) {

@@ -336,3 +336,20 @@ body.overlay-open { overflow: hidden; }
 
 /* Tap highlight off for the app */
 * { -webkit-tap-highlight-color: transparent; }
+
+/*
+ * iOS zooms the whole page in when it focuses a field whose text is smaller
+ * than 16px, and never zooms back out — the usual "the page jumped and now I
+ * can't see the button" report. A floor on the controls themselves is the only
+ * thing that stops it, since Safari ignores `user-scalable=no` on purpose.
+ *
+ * Applied by element rather than per component so a field added later is
+ * covered without anyone having to remember. Desktop keeps the smaller text.
+ */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
