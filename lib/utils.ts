@@ -62,6 +62,25 @@ export const getMinimumOrderAmountFromPostalCode = (postalCode: number, postalRa
   return rate ? rate.minimumOrderAmount : null;
 };
 
+/**
+ * Turn a single configured duration into the range customers actually expect.
+ *
+ * The store stores one number (30), but quoting "30 Min." exactly reads as a
+ * promise and is wrong the moment a driver hits traffic. Every delivery app
+ * shows a window instead, so 30 becomes "20–30". The configured value is the
+ * upper bound — never quote later than the restaurant promised.
+ *
+ * `spread` is the width of the window; the lower bound is floored at 5 so a
+ * short ETA cannot produce a nonsensical "0–10".
+ */
+export const formatEtaRange = (minutes: number | null | undefined, spread = 10): string => {
+  const upper = Number(minutes);
+  if (!Number.isFinite(upper) || upper <= 0) return '';
+  const lower = Math.max(5, Math.round(upper - spread));
+  // A window needs two distinct ends; below the spread just quote the figure.
+  return lower >= upper ? `${upper}` : `${lower}–${upper}`;
+};
+
 // Make one combination of isDeliveryAvailableForPostalCode,getDeliveryChargesFromPostalCode and getMinimumOrderAmountFromPostalCode
 export const getPostalRateInfo = (
   postalCode: number,

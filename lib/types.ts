@@ -181,8 +181,25 @@ export interface Translation {
 // }
 
 export interface IStoreInfo {
+  /** The firm name, joined from the admin's user record — not the store row. */
   brandName: string;
   storeName: string;
+  /**
+   * Declaring a field here is not enough to make it available: `getStoreData`
+   * maps the response through an allow-list, so anything added below must be
+   * added there too or it arrives undefined.
+   */
+  /** Branch name on the store record — "Dach der Liebe", not the firm. */
+  name?: string;
+  /** Free text the admin panel labels "About". */
+  about?: string | null;
+  /** Set in the admin panel's Base Data tab; renders under the name. */
+  cuisineTags?: string[] | null;
+  priceLevel?: string | null;
+  website?: string | null;
+  mobileNumber?: string | null;
+  /** Store-wide ETA, used when no postal-code rate applies. */
+  deliveryTime?: number | null;
   address: string;
   street: string;
   houseNumber: string;

@@ -6,7 +6,7 @@ import { ChevronDown, MapPin, Menu as MenuIcon, Plus, Search, X } from 'lucide-r
 import MobileShell, { MobileScreen, SAFE_TOP } from '~/components/mobile/MobileShell';
 import MobileSkeleton from '~/components/mobile/MobileSkeleton';
 import { fetchMenuData, formatPrice, getCategories } from '~/lib/api';
-import { cn, getImageURL, getPostalRateInfo, IMenuData, MenuProduct } from '~/lib/utils';
+import { cn, formatEtaRange, getImageURL, getPostalRateInfo, IMenuData, MenuProduct } from '~/lib/utils';
 import SmartImage from '~/lib/SmartImage';
 import { getStoreCover } from '~/lib/storeMedia';
 import { getTodayTimings, isRestaurantOpen } from '~/lib/restaurantTimings';
@@ -158,9 +158,9 @@ export default function MobileMenuScreen() {
             )}
 
             <div className='mt-2.5 flex items-center justify-center gap-1.5 whitespace-nowrap text-[12px] font-semibold text-fg-strong'>
-              {rate.deliveryTime ? <span>{rate.deliveryTime} min</span> : null}
+              {rate.deliveryTime ? <span>{formatEtaRange(rate.deliveryTime)} min</span> : null}
               {rate.deliveryTime != null && rate.deliveryCharges != null && <span className='opacity-35'>·</span>}
-              {rate.deliveryCharges != null && <span>{rate.deliveryCharges > 0 ? formatPrice(rate.deliveryCharges) : t.free}</span>}
+              {rate.deliveryCharges != null && <span>{rate.deliveryCharges > 0 ? formatPrice(rate.deliveryCharges) : t.freeDelivery}</span>}
             </div>
 
             <div className='mt-1.5 flex items-center justify-center gap-1.5 text-[12px]'>

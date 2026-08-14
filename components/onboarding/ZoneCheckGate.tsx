@@ -34,6 +34,30 @@ function parseAddress(place: google.maps.places.PlaceResult | google.maps.Geocod
 /** The design enables the check button once more than three characters are typed. */
 const MIN_QUERY = 3;
 
+/**
+ * The design's own "use my location" glyph: a centre dot with four detached
+ * ticks. Inlined rather than taken from lucide — its `Crosshair` draws a full
+ * outer ring and edge-to-edge lines, which reads much heavier at 17px.
+ * Geometry copied verbatim from the handover; `currentColor` replaces the
+ * design's hardcoded #fff so the icon still follows the button's text colour.
+ */
+function LocateIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox='0 0 20 20'
+      fill='none'
+      stroke='currentColor'
+      strokeWidth={1.9}
+      strokeLinecap='round'
+      strokeLinejoin='round'
+      aria-hidden='true'
+      className={className}>
+      <circle cx='10' cy='10' r='3' />
+      <path d='M10 1.5v3M10 15.5v3M18.5 10h-3M4.5 10h-3' />
+    </svg>
+  );
+}
+
 type Result =
   | {
       status: 'ok';
@@ -48,7 +72,7 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
   const { t } = useLanguage();
   const isMobile = useIsMobile();
   const storeInfo = useStore();
-  const { setDeliveryAddress, setOrderType } = useAddress();
+  const { setDeliveryAddress, setOrderType, saveAddress } = useAddress();
   const { loaded, error: mapsError } = useGoogleMaps(storeInfo?.posGoogleApiKey || '');
 
   const [query, setQuery] = useState('');
@@ -60,6 +84,13 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
   /* Set when a Places/Geocoder request comes back refused — see isKeyRefused. */
   const [lookupError, setLookupError] = useState('');
   const inputRef = useRef<HTMLInputElement | null>(null);
+  /*
+   * The query value we filled in ourselves — by picking a suggestion or by
+   * geolocating. The lookup effect below keys on `query`, so without this it
+   * searches for the address we just resolved and re-opens the dropdown on top
+   * of the availability result. Cleared as soon as the customer types again.
+   */
+  const autofilled = useRef<string | null>(null);
 
   useEffect(() => {
     if (typeof document !== 'undefined') document.body.classList.add('overlay-open');
@@ -70,6 +101,11 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
 
   useEffect(() => {
     if (!loaded) return;
+    // Already resolved by us — nothing to look up, and the list must stay shut.
+    if (autofilled.current === query) {
+      setPredictions((prev) => (prev.length ? [] : prev));
+      return;
+    }
     const q = query.trim();
     // Too-short input clears on the next tick rather than after the debounce,
     // so deleting the query drops the dropdown at once.
@@ -93,6 +129,9 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
   }, [query, loaded]);
 
   const checkAddress = (address: DeliveryAddress) => {
+    // Every path into a result ends here, so this is the one place that has to
+    // close the dropdown — including "check" pressed with the list still open.
+    setPredictions([]);
     const rate = getPostalRateInfo(Number(address.postalCode || 0), storeInfo?.postalRates || []);
     setResult(
       rate.isAvailable
@@ -107,6 +146,7 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
   };
 
   const pickPrediction = (placeId: string, label: string) => {
+    autofilled.current = label;
     setQuery(label);
     setPredictions([]);
     if (!loaded) return;
@@ -132,6 +172,7 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
         if (isKeyRefused(status)) setLookupError(MAPS_AUTH_ERROR);
         if (status === 'OK' && results && results[0]) {
           const addr = parseAddress(results[0]);
+          autofilled.current = addr.formattedAddress;
           setQuery(addr.formattedAddress);
           checkAddress(addr);
         }
@@ -170,6 +211,14 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
   const continueToMenu = () => {
     if (result?.status !== 'ok') return;
     setContinuing(true);
+    /*
+     * Keep it in the address book too, not just as the active address.
+     * Every other entry point goes through DeliveryAddressModal, which saves on
+     * commit; this gate used to set only the active address, so the header's
+     * address dialog opened on an empty "add your first address" form right
+     * after the customer had entered one.
+     */
+    saveAddress(result.address);
     setDeliveryAddress(result.address); // also sets orderType = delivery
     setTimeout(() => onDone(true), 600);
   };
@@ -191,6 +240,9 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
     phone: storeInfo?.phone || '',
     inputRef,
     onQueryChange: (value) => {
+      // Typing again means the value is no longer one we resolved, so
+      // suggestions resume.
+      autofilled.current = null;
       setQuery(value);
       setResult(null);
     },
@@ -198,6 +250,9 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
     onUseLocation: useLocation,
     onContinue: continueToMenu,
     onReset: () => {
+      // Must clear too, or retyping that exact address later would be mistaken
+      // for an autofill and silently show no suggestions.
+      autofilled.current = null;
       setResult(null);
       setQuery('');
     },
@@ -347,7 +402,7 @@ function DesktopZonePanel({
           {/* Use location */}
           <button onClick={onUseLocation} className='mt-2.5 flex w-full items-center gap-3 rounded-[14px] px-4 py-3 text-left transition hover:bg-surface-hover'>
             <span className='flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] bg-surface-1'>
-              <Crosshair className='h-[17px] w-[17px]' />
+              <LocateIcon className='h-[17px] w-[17px]' />
             </span>
             <span className='text-sm font-bold'>{t.useCurrentLocation ?? 'Use current location'}</span>
           </button>

@@ -7,7 +7,7 @@ import { ChevronLeft, ChevronRight, Bike, ShoppingBag, MapPin, Zap, Check, Clock
 import { useCheckout, TIP_VALUES } from '~/hooks/useCheckout';
 import { formatPrice } from '~/lib/api';
 
-import { cn } from '~/lib/utils';
+import { cn, formatEtaRange } from '~/lib/utils';
 import { buildStaticMap } from '~/lib/staticMap';
 import RouteMap from '~/components/checkout/RouteMap';
 import ShopHeaderMinimal from '~/components/menu/ShopHeaderMinimal';
@@ -266,7 +266,7 @@ export default function CheckoutScreen() {
                     active: timing === 'standard',
                     onClick: () => chooseTiming('standard'),
                     title: t.standard ?? 'Standard',
-                    sub: isDelivery ? (deliveryTime ? `${deliveryTime} Min` : '') : (t.asapTime ?? 'ASAP'),
+                    sub: isDelivery ? (deliveryTime ? `${formatEtaRange(deliveryTime)} Min` : '') : (t.asapTime ?? 'ASAP'),
                     right: t.free ?? 'Free',
                   })}
 
@@ -277,7 +277,7 @@ export default function CheckoutScreen() {
                       onClick: () => chooseTiming('priority'),
                       title: t.priority ?? 'Priority',
                       badge: 'priority',
-                      sub: priorityTime ? `${priorityTime} Min` : '',
+                      sub: priorityTime ? `${formatEtaRange(priorityTime)} Min` : '',
                       right: `+ ${formatPrice(priorityCharge)}`,
                     })}
 

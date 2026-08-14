@@ -131,9 +131,9 @@ export default function PreorderModal({ open, onClose, onConfirm, onStandard }: 
                 value={activeTime}
                 onChange={(e) => setTime(e.target.value)}
                 aria-label={t.time ?? 'Time'}
-                className='min-w-0 flex-1 appearance-none border-none bg-transparent text-[15px] font-semibold text-white'>
+                className='min-w-0 flex-1 appearance-none border-none bg-transparent text-[15px] font-bold text-white'>
                 {times.map((tm) => (
-                  <option key={tm} value={tm} className='bg-card text-white'>
+                  <option key={tm} value={tm} className='bg-card font-bold text-white'>
                     {tm}
                   </option>
                 ))}

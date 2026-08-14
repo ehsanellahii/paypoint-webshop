@@ -126,6 +126,21 @@ export interface Translations {
   resetSearch: string;
   minimumOrderValue: string;
   free: string;
+  /** Distinct from `free` — that one also labels zero-cost product options. */
+  freeDelivery: string;
+  aboutRestaurant: string;
+  website: string;
+  /* Diagnostic markers: shown in place of data the backend does not supply. */
+  notProvided: string;
+  fieldDescription: string;
+  fieldCuisine: string;
+  fieldRating: string;
+  fieldDeliveryTime: string;
+  fieldMinimumOrder: string;
+  fieldOpeningHours: string;
+  fieldAddress: string;
+  fieldPhone: string;
+  fieldLogo: string;
   optional: string;
   required: string;
   added: string;
@@ -480,6 +495,19 @@ export const translations: Record<Language, Translations> = {
     resetSearch: 'Reset search',
     minimumOrderValue: 'Min. order',
     free: 'Free',
+    freeDelivery: 'Free delivery',
+    aboutRestaurant: 'About us',
+    website: 'Website',
+    notProvided: 'not provided',
+    fieldDescription: 'Description',
+    fieldCuisine: 'Cuisine tags',
+    fieldRating: 'Rating',
+    fieldDeliveryTime: 'Delivery time',
+    fieldMinimumOrder: 'Minimum order',
+    fieldOpeningHours: 'Opening hours',
+    fieldAddress: 'Address',
+    fieldPhone: 'Phone',
+    fieldLogo: 'Logo',
     optional: 'optional',
     required: 'Required',
     added: 'Added',
@@ -832,6 +860,19 @@ export const translations: Record<Language, Translations> = {
     resetSearch: 'Suche zurücksetzen',
     minimumOrderValue: 'MBW',
     free: 'Gratis',
+    freeDelivery: 'Lieferung gratis',
+    aboutRestaurant: 'Über uns',
+    website: 'Webseite',
+    notProvided: 'fehlt',
+    fieldDescription: 'Beschreibung',
+    fieldCuisine: 'Küchen-Tags',
+    fieldRating: 'Bewertung',
+    fieldDeliveryTime: 'Lieferzeit',
+    fieldMinimumOrder: 'Mindestbestellwert',
+    fieldOpeningHours: 'Öffnungszeiten',
+    fieldAddress: 'Adresse',
+    fieldPhone: 'Telefon',
+    fieldLogo: 'Logo',
     optional: 'optional',
     required: 'Pflicht',
     added: 'Hinzugefügt',

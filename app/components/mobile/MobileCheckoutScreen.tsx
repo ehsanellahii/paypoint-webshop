@@ -15,7 +15,7 @@ import { buildStaticMap } from '~/lib/staticMap';
 import RouteMap from '~/components/checkout/RouteMap';
 import StripePaymentSheet from '~/components/checkout/StripePaymentSheet';
 import { cartLineExtras } from '~/lib/cartLine';
-import { cn, getImageURL } from '~/lib/utils';
+import { cn, formatEtaRange, getImageURL } from '~/lib/utils';
 
 const rowInput = 'min-w-0 flex-1 border-none bg-transparent text-[14.5px] font-semibold text-white placeholder:text-muted-foreground';
 
@@ -213,14 +213,14 @@ export default function MobileCheckoutScreen() {
                 onClick: () => c.chooseTiming('priority'),
                 title: t.priority,
                 badge: 'priority',
-                sub: c.priorityTime ? `${c.priorityTime} Min` : '',
+                sub: c.priorityTime ? `${formatEtaRange(c.priorityTime)} Min` : '',
                 right: `+ ${formatPrice(c.priorityCharge)}`,
               })}
             {timingRow({
               active: c.timing === 'standard',
               onClick: () => c.chooseTiming('standard'),
               title: t.standard,
-              sub: c.isDelivery ? (c.deliveryTime ? `${c.deliveryTime} Min` : '') : t.asapTime,
+              sub: c.isDelivery ? (c.deliveryTime ? `${formatEtaRange(c.deliveryTime)} Min` : '') : t.asapTime,
               right: t.free,
             })}
             {timingRow({

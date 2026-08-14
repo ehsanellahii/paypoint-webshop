@@ -4,7 +4,7 @@ import { Bike, ShoppingBag, Clock } from 'lucide-react';
 import { useAddress } from '~/contexts/address-context';
 import { useStore } from '~/contexts/store-context';
 import { useLanguage } from '~/contexts/language-context';
-import { getPostalRateInfo } from '~/lib/utils';
+import { formatEtaRange, getPostalRateInfo } from '~/lib/utils';
 import { formatPrice } from '@/lib/api';
 import { getTodayTimings, isRestaurantOpen } from '~/lib/restaurantTimings';
 import { cn } from '~/lib/utils';
@@ -54,7 +54,7 @@ export default function MenuMetaBar({ onRequireAddress, onOpenInfo, onOpenPreord
               <button onClick={chooseDelivery} className={seg(isDelivery)} style={{ height: 38 }}>
                 <Bike className='h-4 w-4' />
                 {t.delivery}
-                {rate.deliveryTime ? ` ${rate.deliveryTime} Min.` : ''}
+                {rate.deliveryTime ? ` ${formatEtaRange(rate.deliveryTime)} Min.` : ''}
               </button>
             )}
             {isPickupAvailable && (
@@ -88,7 +88,9 @@ export default function MenuMetaBar({ onRequireAddress, onOpenInfo, onOpenPreord
               <span className='opacity-40'>·</span>
               <span className='inline-flex items-center gap-1.5'>
                 <Bike className='h-[15px] w-[15px]' />
-                <span className='font-bold text-white'>{rate.deliveryCharges > 0 ? formatPrice(rate.deliveryCharges) : (t.free ?? 'Free')}</span>
+                {/* Nothing labels this figure but the bike icon, so "Gratis"
+                    alone was ambiguous — name what is free. */}
+                <span className='font-bold text-white'>{rate.deliveryCharges > 0 ? formatPrice(rate.deliveryCharges) : (t.freeDelivery ?? 'Free delivery')}</span>
               </span>
             </>
           )}

@@ -42,9 +42,24 @@ export const getStoreData = cache(async (slug: string, token?: string) => {
     throw new Error('Failed to fetch store data');
   }
   const data = await response.json();
+  /*
+   * An allow-list, not a spread: the endpoint returns the whole store document
+   * (bank details included), and only what is listed here reaches the browser.
+   * A new field is therefore invisible on the storefront until it is added
+   * below, however correctly the API sends it.
+   */
   return {
     brandName: data?.data?.brandName,
     storeName: data?.data?.store_name,
+    /** Branch name — `brandName` above is the firm. */
+    name: data?.data?.name || '',
+    about: data?.data?.about || '',
+    cuisineTags: data?.data?.cuisineTags || [],
+    priceLevel: data?.data?.priceLevel || '',
+    /** Store-wide fallback ETA; per-zone values ride on `postalRates`. */
+    deliveryTime: data?.data?.deliveryTime ?? null,
+    website: data?.data?.website || '',
+    mobileNumber: data?.data?.mobileNumber || '',
     address: data?.data?.address,
     street: data?.data?.street,
     houseNumber: data?.data?.houseNumber,
