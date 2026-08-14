@@ -5,6 +5,7 @@ import { formatPrice } from '@/lib/api';
 import { cn, getImageURL, MenuProduct } from '~/lib/utils';
 import FavoriteButton from './FavoriteButton';
 import { useStore } from '~/contexts/store-context';
+import { useLanguage } from '~/contexts/language-context';
 import { useCart } from '~/contexts/cart-context';
 import { flyToCart } from '~/lib/flyToCart';
 import SmartImage from '~/lib/SmartImage';
@@ -27,7 +28,7 @@ const Stepper = ({
   dec: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }) => (
   <div className={cn('flex items-center gap-2 rounded-[15px] bg-white/95 px-2 py-1 shadow-[0_6px_18px_-6px_rgba(0,0,0,0.45)] backdrop-blur anim-heartin', className)}>
-    <button onClick={dec} aria-label='less' className='flex h-8 w-8 items-center justify-center rounded-full bg-[#f0f0f2] transition active:scale-[0.82]'>
+    <button onClick={dec} aria-label='less' className='flex h-8 w-8 items-center justify-center rounded-full bg-control-light transition active:scale-[0.82]'>
       <Minus className='h-4 w-4 text-black' strokeWidth={2.8} />
     </button>
     <span className='min-w-5 text-center text-[17px] font-extrabold tabular-nums text-black'>{qty}</span>
@@ -39,6 +40,7 @@ const Stepper = ({
 
 export default function ProductCard({ product, onClick }: ProductCardProps) {
   const storeInfo = useStore();
+  const { t } = useLanguage();
   const storeKey = storeInfo?.slug || 'default';
   const logoURL = storeInfo?.settings?.logo || '';
   const { cart, addToCart, updateQuantity } = useCart();
@@ -81,11 +83,11 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
       {/* Left: text */}
       <div className='flex min-w-0 flex-1 flex-col'>
         {popular && (
-          <div className='mb-2 inline-flex items-center gap-1.5 self-start text-[12px] font-bold text-star'>
+          <div className='mb-2 inline-flex items-center gap-1.5 self-start text-[12px] font-bold text-star-badge'>
             <svg width='13' height='13' viewBox='0 0 24 24' fill='currentColor'>
               <path d='M12 2.5l2.9 6 6.5.6-4.9 4.3 1.5 6.4L12 16.9 5.9 19.8l1.5-6.4L2.5 9.1l6.5-.6z' />
             </svg>
-            Popular
+            {t.popular}
           </div>
         )}
         <div className='line-clamp-2 text-base font-bold leading-[1.25]'>{product.name}</div>
@@ -116,7 +118,7 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
       {/* Right: image */}
       {hasPhoto && (
         <div className='relative shrink-0'>
-          <div className='img-shimmer relative h-[124px] w-[132px] overflow-hidden rounded-[14px] md:h-[150px] md:w-[172px]'>
+          <div className='relative h-[116px] w-[116px] overflow-hidden rounded-[14px] min-[761px]:h-[104px] min-[761px]:w-[104px] min-[981px]:h-[124px] min-[981px]:w-[132px] min-[1181px]:h-[150px] min-[1181px]:w-[172px]'>
             <SmartImage
               src={imageUrl}
               alt={product.name}

@@ -8,7 +8,7 @@ export default function Footer() {
   const storeInfo = useStore();
   const { t } = useLanguage();
   return (
-    <footer className='mx-auto mb-6 mt-4 max-w-[1320px] rounded-2xl border border-border bg-surface-1 p-6 text-sm'>
+    <footer className='mx-auto shell mb-6 mt-4 rounded-2xl border border-border bg-surface-1 p-6 text-sm'>
       <div className='mx-auto'>
         {/* Top Section */}
         <div className='mb-4 flex flex-col items-center justify-between border-b border-border pb-4 md:flex-row md:items-start'>

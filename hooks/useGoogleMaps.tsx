@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react';
 declare global {
   interface Window {
     __gmapsKeyLoaded?: string;
+    /** Called by the Maps SDK itself when the key is rejected. */
+    gm_authFailure?: () => void;
   }
 }
 
@@ -12,11 +14,66 @@ const SCRIPT_ID = 'google-maps-script';
 /** Enough of the SDK URL to recognise a loader that is not this hook. */
 const MAPS_SRC = 'maps.googleapis.com/maps/api/js';
 
+export const MAPS_AUTH_ERROR = 'MAPS_AUTH_FAILED';
+
+/**
+ * Does this Places / Geocoder status mean the key was refused, rather than
+ * "nothing matched"?
+ *
+ * `gm_authFailure` only fires for the Maps JavaScript API's own auth check,
+ * which runs when a map is drawn. This app never draws one — it only asks
+ * Places and the Geocoder — so a billing or key problem never reaches that
+ * callback. It arrives here instead, once per request, while the SDK logs
+ * "BillingNotEnabledMapError" to the console. Discarding the status is what
+ * made the failure invisible.
+ */
+export function isKeyRefused(status: string): boolean {
+  return status === 'REQUEST_DENIED' || status === 'OVER_QUERY_LIMIT';
+}
+
+/*
+ * A rejected key — billing switched off, referrer not allowed, Places not
+ * enabled — is not a load failure. Google serves the script, `onload` fires,
+ * and only then does the SDK call `gm_authFailure` and log to the console.
+ *
+ * Without this the hook reported a healthy `loaded: true` while every Places
+ * call quietly returned nothing, which is exactly how a billing problem
+ * reaches a guest as an address box that simply never finds anything.
+ *
+ * Module scope, because the SDK gives us one global callback and every mounted
+ * consumer needs to hear about it.
+ */
+let authFailed = false;
+const authListeners = new Set<() => void>();
+
+function installAuthFailureHook() {
+  if (typeof window === 'undefined' || window.gm_authFailure) return;
+  window.gm_authFailure = () => {
+    authFailed = true;
+    authListeners.forEach((notify) => notify());
+  };
+}
+
 export function useGoogleMaps(apiKey?: string) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string>('');
 
+  // Listen for the SDK rejecting the key, whoever loaded it.
   useEffect(() => {
+    installAuthFailureHook();
+    const onAuthFailed = () => {
+      setError(MAPS_AUTH_ERROR);
+      setLoaded(false);
+    };
+    if (authFailed) onAuthFailed();
+    authListeners.add(onAuthFailed);
+    return () => {
+      authListeners.delete(onAuthFailed);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (authFailed) return;
     if (!apiKey) {
       setLoaded(false);
       setError('Missing Google Maps API key.');

@@ -25,13 +25,13 @@ export default function MenuHeader({ query, onQueryChange, cartCount, subtotal, 
 
   return (
     <header className='sticky top-0 z-40 border-b border-border bg-[rgba(20,20,22,0.92)] backdrop-blur-[14px]'>
-      <div className='mx-auto flex h-[74px] max-w-[1320px] items-center gap-4 px-4 md:px-8'>
+      <div className='shell shell-pad flex h-[74px] items-center gap-4'>
         <BrandMark onClick={onLogoClick} />
 
         {showAddr && (
           <button
             onClick={onOpenAddress}
-            className='hidden shrink-0 items-center gap-2.5 rounded-full bg-surface-1 py-0 pl-[5px] pr-4 text-sm font-bold text-white transition hover:bg-elevated sm:flex'
+            className='flex min-w-0 shrink items-center gap-2.5 rounded-full bg-surface-1 py-0 pl-[5px] pr-4 text-sm font-bold text-white transition hover:bg-elevated sm:shrink-0'
             style={{ height: 44 }}
             aria-label='Change delivery address'>
             <span className='flex h-[34px] w-[34px] items-center justify-center rounded-full bg-surface-3'>
@@ -43,7 +43,7 @@ export default function MenuHeader({ query, onQueryChange, cartCount, subtotal, 
         )}
 
         {/* Desktop search */}
-        <div className='hidden flex-1 items-center gap-3 rounded-[13px] border border-border bg-surface-1 px-4 transition focus-within:border-white/60 md:flex' style={{ height: 44 }}>
+        <div className='hidden flex-1 items-center gap-3 rounded-[13px] border border-border bg-surface-1 px-4 transition focus-within:border-white/60 focus-within:shadow-[0_0_0_3px_rgba(255,255,255,0.12)] md:flex' style={{ height: 44 }}>
           <Search className='h-[18px] w-[18px] shrink-0 text-muted-foreground' />
           <input
             value={query}
@@ -52,7 +52,7 @@ export default function MenuHeader({ query, onQueryChange, cartCount, subtotal, 
             className='min-w-0 flex-1 border-none bg-transparent text-sm font-medium text-white outline-none'
           />
           {query && (
-            <button onClick={() => onQueryChange('')} aria-label='Clear search' className='flex h-6 w-6 items-center justify-center rounded-full bg-[#3a3a3e] text-white transition hover:bg-[#4a4a4f]'>
+            <button onClick={() => onQueryChange('')} aria-label='Clear search' className='flex h-6 w-6 items-center justify-center rounded-full bg-control text-white transition hover:bg-control-hover'>
               <X className='h-3 w-3' />
             </button>
           )}
@@ -67,7 +67,8 @@ export default function MenuHeader({ query, onQueryChange, cartCount, subtotal, 
             data-cart-target='1'
             className='flex h-11 shrink-0 items-center gap-2.5 rounded-[13px] bg-primary px-2 text-selected-text transition hover:brightness-95'>
             <span className='flex h-7 min-w-[26px] items-center justify-center rounded-[9px] bg-black px-2 text-[13px] font-extrabold text-white'>{cartCount}</span>
-            <span className='hidden text-sm font-extrabold sm:inline'>{t.order ?? 'View order'}</span>
+            {/* `viewOrder`, not `order`: the design labels this "Bestellung ansehen", and the bottom bar already says the same. */}
+            <span className='hidden text-sm font-extrabold sm:inline'>{t.viewOrder ?? 'View order'}</span>
             <span className='px-2 pl-1 text-sm font-extrabold'>{formatPrice(subtotal)}</span>
           </button>
         )}

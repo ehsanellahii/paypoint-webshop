@@ -1,8 +1,9 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { X } from 'lucide-react';
+import { ChevronDown, Clock, X } from 'lucide-react';
 import { Dialog } from '@base-ui/react/dialog';
+import { generateDaySlots } from '~/lib/generateTimeSlotsWithinHours';
 import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
 import { useAddress } from '~/contexts/address-context';
@@ -23,23 +24,17 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onConfirm: (slot: PreorderSlot) => void;
+  /**
+   * "Standard" in the design's sheet — drop any slot and go back to the normal
+   * window. Optional: callers without a standard mode just close.
+   */
+  onStandard?: () => void;
 };
 
 const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 
-function toMinutes(hhmm: string) {
-  const [h, m] = (hhmm || '').split(':').map(Number);
-  return (h || 0) * 60 + (m || 0);
-}
-function fromMinutes(mins: number) {
-  const h = Math.floor(mins / 60) % 24;
-  const m = mins % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
 
-const FALLBACK_TIMES = ['11:30', '12:00', '12:30', '13:00', '18:00', '18:30', '19:00', '19:30', '20:00', '20:30', '21:00', '21:30'];
-
-export default function PreorderModal({ open, onClose, onConfirm }: Props) {
+export default function PreorderModal({ open, onClose, onConfirm, onStandard }: Props) {
   const { t, language } = useLanguage();
   const storeInfo = useStore();
   const { orderType } = useAddress();
@@ -65,19 +60,23 @@ export default function PreorderModal({ open, onClose, onConfirm }: Props) {
     return out;
   }, [language, t]);
 
-  // Time slots for the selected day, based on opening hours (fallback list otherwise).
-  const times = useMemo(() => {
+  // The selected day's opening window, shown next to the time label.
+  const window = useMemo(() => {
     const key = days[dayIdx]?.key;
     const timings = storeInfo?.timings as Record<string, { open: string; close: string }> | null | undefined;
     const win = timings && key ? timings[key] : undefined;
-    if (!win?.open || !win?.close) return FALLBACK_TIMES;
-    let start = Math.ceil(toMinutes(win.open) / 30) * 30;
-    let end = toMinutes(win.close);
-    if (end <= start) end += 24 * 60; // overnight
-    const slots: string[] = [];
-    for (let m = start; m <= end - 30 && slots.length < 20; m += 30) slots.push(fromMinutes(m));
-    return slots.length ? slots : FALLBACK_TIMES;
+    return win?.open && win?.close ? `${win.open} – ${win.close}` : '';
   }, [days, dayIdx, storeInfo?.timings]);
+
+  // Same rules as the mobile sheet: today from the next half hour, other days
+  // across their window, never past midnight.
+  const times = useMemo(
+    () => generateDaySlots({ weeklyHours: storeInfo?.timings as any, dayOffset: dayIdx, intervalMinutes: 30 }),
+    [storeInfo?.timings, dayIdx],
+  );
+
+  /* A day change can strip the chosen time, so fall back to the first on offer. */
+  const activeTime = times.includes(time) ? time : (times[0] ?? '');
 
   const confirm = () => {
     const day = days[dayIdx];
@@ -116,20 +115,30 @@ export default function PreorderModal({ open, onClose, onConfirm }: Props) {
               })}
             </div>
 
-            {/* Times */}
-            <div className='mb-2.5 mt-5 text-[12px] font-bold uppercase tracking-[0.04em] text-muted-foreground'>{t.time ?? 'Time'}</div>
-            <div className='thinbar flex max-h-[150px] flex-wrap gap-2.5 overflow-y-auto'>
-              {times.map((tm) => {
-                const on = tm === time;
-                return (
-                  <button
-                    key={tm}
-                    onClick={() => setTime(tm)}
-                    className={cn('min-w-[74px] flex-none rounded-[14px] border py-3 text-center text-[14.5px] font-bold transition', on ? 'border-white bg-primary text-selected-text' : 'border-border bg-surface-1 text-white')}>
+            {/*
+              Time is a select rather than a wrap of chips: the design replaced the
+              chips with a single input on desktop, where a pointer makes picking
+              from a list quicker than scanning twenty targets. The options are
+              still the store's bookable slots, so nothing unbookable is offerable.
+            */}
+            <div className='mb-2.5 mt-5 flex items-center justify-between'>
+              <span className='text-[12px] font-bold uppercase tracking-[0.04em] text-muted-foreground'>{t.time ?? 'Time'}</span>
+              {window && <span className='text-[12px] font-semibold text-muted-foreground-2'>{window}</span>}
+            </div>
+            <div className='flex h-[58px] items-center gap-3 rounded-2xl border-[1.5px] border-border bg-background px-3.5 transition focus-within:border-white/60'>
+              <Clock className='h-5 w-5 shrink-0 text-muted-foreground' strokeWidth={1.8} />
+              <select
+                value={activeTime}
+                onChange={(e) => setTime(e.target.value)}
+                aria-label={t.time ?? 'Time'}
+                className='min-w-0 flex-1 appearance-none border-none bg-transparent text-[15px] font-semibold text-white'>
+                {times.map((tm) => (
+                  <option key={tm} value={tm} className='bg-card text-white'>
                     {tm}
-                  </button>
-                );
-              })}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className='h-4 w-4 shrink-0 text-muted-foreground' strokeWidth={2.2} />
             </div>
 
             <button onClick={confirm} className='mt-5 h-14 w-full rounded-2xl bg-primary text-[15.5px] font-extrabold text-selected-text transition active:scale-[0.98]'>

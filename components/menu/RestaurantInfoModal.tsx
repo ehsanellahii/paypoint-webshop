@@ -31,18 +31,18 @@ export default function RestaurantInfoModal({ open, onClose }: Props) {
       <Dialog.Portal>
         <Dialog.Backdrop className='fixed inset-0 z-[59] bg-black/74 data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0' />
         <Dialog.Viewport className='fixed inset-0 z-[59] flex items-center justify-center p-4'>
-          <Dialog.Popup className='anim-scalein flex max-h-[88vh] w-[520px] max-w-full flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-[0_40px_90px_-20px_rgba(0,0,0,0.8)]'>
+          <Dialog.Popup className='anim-scalein relative flex max-h-[88vh] w-[520px] max-w-full flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-[0_40px_90px_-20px_rgba(0,0,0,0.8)]'>
             <Dialog.Close aria-label={t.close} className='absolute right-[18px] top-[18px] z-[4] flex h-10 w-10 items-center justify-center rounded-full bg-surface-3 text-white transition active:scale-90'>
               <X className='h-[18px] w-[18px]' strokeWidth={2.2} />
             </Dialog.Close>
 
             <div className='min-h-0 flex-1 overflow-y-auto scrollbar-hide p-7'>
               <Dialog.Title className='sr-only'>{storeInfo?.brandName}</Dialog.Title>
-              <BrandMark size='lg' />
+              <BrandMark size='auth' />
 
-              <div className='mt-4 flex flex-wrap items-center gap-2.5 text-[13.5px] font-semibold text-[#b9bbbf]'>
+              <div className='mt-4 flex flex-wrap items-center gap-2.5 text-[13.5px] font-semibold text-fg-secondary'>
                 <span className='inline-flex items-center gap-1.5'>
-                  <Star className='h-[15px] w-[15px] fill-star text-star' />
+                  <Star className='h-[15px] w-[15px] fill-star-rating text-star-rating' />
                   <span className='font-bold text-white'>4.8</span> (820+)
                 </span>
                 <span className='opacity-35'>·</span>
@@ -58,7 +58,7 @@ export default function RestaurantInfoModal({ open, onClose }: Props) {
                   {rows.map((k, i) => (
                     <div key={k} className={cn('flex items-center justify-between px-4 py-3', i < rows.length - 1 && 'border-b border-white/5', k === todayKey && 'bg-white/[0.04]')}>
                       <span className={cn('text-sm font-bold', k === todayKey ? 'text-white' : 'text-white')}>{labels[k]}</span>
-                      <span className='text-sm font-semibold text-[#b9bbbf]'>
+                      <span className='text-sm font-semibold text-fg-secondary'>
                         {timings[k].open} – {timings[k].close}
                       </span>
                     </div>

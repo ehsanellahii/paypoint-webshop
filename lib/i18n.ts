@@ -132,6 +132,39 @@ export interface Translations {
   recommendedForYou: string;
   messageForRestaurant: string;
   messageForRestaurantPlaceholder: string;
+  messageForRestaurantHint: string;
+  goToCheckout: string;
+  loginWelcome: string;
+  loginSub: string;
+  continueAsGuest: string;
+  orDivider: string;
+  legalNoticePrefix: string;
+  legalNoticeAnd: string;
+  otpTitle: string;
+  otpHeroTitle: string;
+  otpHeroSub: string;
+  confirm: string;
+  otpSentTo: string;
+  resendOtp: string;
+  demoCode: string;
+  active: string;
+  pastOrders: string;
+  paymentCards: string;
+  paymentOtherMethods: string;
+  addNewCard: string;
+  onlinePayment: string;
+  invoiceOrInstalments: string;
+  statusAccepted: string;
+  isPreparingYourOrder: string;
+  skipToContent: string;
+  voucherActivated: string;
+  saved: string;
+  menuLoadFailed: string;
+  menuLoadFailedSub: string;
+  reload: string;
+  cartEmpty: string;
+  cartEmptySub: string;
+  addMoreItems: string;
   save: string;
   edit: string;
   tip: string;
@@ -156,6 +189,34 @@ export interface Translations {
   doWeDeliverSub: string;
   streetHouseAndPostcode: string;
   useCurrentLocation: string;
+  checkDeliveryArea: string;
+  bellNameRequiredField: string;
+  callbackNumber: string;
+  phoneForQuestions: string;
+  redeem: string;
+  or: string;
+  yourSavedDishes: string;
+  orderedItems: string;
+  productInfo: string;
+  addMore: string;
+  paymentMethodsSummary: string;
+  redeemCode: string;
+  enterPromoCode: string;
+  chooseDeliveryTime: string;
+  soldOut: string;
+  saveOnYourOrder: string;
+  enterCodeOrPickOffer: string;
+  voucherCode: string;
+  applied: string;
+  voucherActive: string;
+  availableOffers: string;
+  payNow: string;
+  paymentFailed: string;
+  paymentType: string;
+  callbackNumberShort: string;
+  driverInstructions: string;
+  addressLookupUnavailable: string;
+  addressLookupUnavailableSub: string;
   weDeliverToYou: string;
   deliveryTimeApprox: string;
   from: string;
@@ -165,6 +226,16 @@ export interface Translations {
   checkAnotherAddress: string;
   callUs: string;
   switchToPickupBrowse: string;
+  switchToPickup: string;
+  addNewAddress: string;
+  addressBookSub: string;
+  saveAs: string;
+  labelHome: string;
+  labelWork: string;
+  labelOther: string;
+  chooseFromSuggestions: string;
+  saveAddress: string;
+  deleteAddress: string;
   exploreShopAnyway: string;
   orderConfirmed: string;
   orderConfirmedDeliverySub: string;
@@ -195,6 +266,10 @@ export interface Translations {
   contactSupport: string;
   changeLanguage: string;
   legal: string;
+  my: string;
+  quickAccess: string;
+  myCart: string;
+  logoutConfirm: string;
   privacy: string;
   terms: string;
   imprint: string;
@@ -410,7 +485,40 @@ export const translations: Record<Language, Translations> = {
     added: 'Added',
     recommendedForYou: 'Recommended for you',
     messageForRestaurant: 'Message for the restaurant',
-    messageForRestaurantPlaceholder: 'Special requests, allergies, dietary notes…',
+    messageForRestaurantPlaceholder: 'Special requests, allergies, dietary restrictions or a gift-card message …',
+    messageForRestaurantHint: 'Special requests, allergies or a gift note',
+    goToCheckout: 'Go to checkout',
+    loginWelcome: 'Welcome to',
+    loginSub: 'Sign in to order — or check out as a guest.',
+    continueAsGuest: 'Order as a guest',
+    orDivider: 'or',
+    legalNoticePrefix: 'By signing in you accept our',
+    legalNoticeAnd: 'and',
+    otpTitle: 'Confirmation code',
+    otpHeroTitle: 'One step away from your order.',
+    otpHeroSub: 'We sent you a code by SMS. Enter it here to continue.',
+    confirm: 'Confirm',
+    otpSentTo: 'Sent to',
+    resendOtp: 'Send the code again',
+    demoCode: 'Demo code',
+    active: 'Active',
+    pastOrders: 'Past orders',
+    paymentCards: 'Credit cards',
+    paymentOtherMethods: 'Other payment methods',
+    addNewCard: 'Add a new card',
+    onlinePayment: 'Online payment',
+    invoiceOrInstalments: 'Invoice or instalments',
+    statusAccepted: 'Accepted',
+    isPreparingYourOrder: 'is preparing your order',
+    skipToContent: 'Skip to content',
+    voucherActivated: 'Voucher activated!',
+    saved: 'saved',
+    menuLoadFailed: 'The menu could not be loaded',
+    menuLoadFailedSub: 'You are seeing only part of it. Please reload the page.',
+    reload: 'Reload',
+    cartEmpty: 'Your cart is empty',
+    cartEmptySub: 'Add a dish to get to checkout.',
+    addMoreItems: 'Add more items',
     save: 'Save',
     edit: 'Edit',
     tip: 'Tip',
@@ -435,6 +543,34 @@ export const translations: Record<Language, Translations> = {
     doWeDeliverSub: 'Enter your address — we’ll instantly check if you’re in our delivery area.',
     streetHouseAndPostcode: 'Street, house no. & postcode',
     useCurrentLocation: 'Use current location',
+    checkDeliveryArea: 'Check delivery area',
+    bellNameRequiredField: 'Name on doorbell (required)',
+    callbackNumber: 'Callback number (required)',
+    phoneForQuestions: 'Phone number for questions (required)',
+    redeem: 'Redeem',
+    or: 'or',
+    yourSavedDishes: 'Your saved dishes',
+    orderedItems: 'Ordered items',
+    productInfo: 'Product info',
+    addMore: 'Add more',
+    paymentMethodsSummary: 'Cash, card, PayPal or Klarna',
+    redeemCode: 'Redeem a code',
+    enterPromoCode: 'Enter a discount or promo code',
+    chooseDeliveryTime: 'Choose a delivery time',
+    soldOut: 'Fully booked',
+    saveOnYourOrder: 'Save on your order',
+    enterCodeOrPickOffer: 'Enter a code or pick an offer',
+    voucherCode: 'VOUCHER CODE',
+    applied: 'Applied',
+    voucherActive: 'ACTIVE',
+    availableOffers: 'Available offers',
+    payNow: 'Pay now',
+    paymentFailed: 'Payment failed',
+    paymentType: 'Payment type',
+    callbackNumberShort: 'Callback number',
+    driverInstructions: 'Instructions for the driver (e.g. back door, 3rd floor)',
+    addressLookupUnavailable: 'Address search is unavailable',
+    addressLookupUnavailableSub: 'We can’t check your postcode automatically right now. Choose pickup, or call us and we’ll check for you.',
     weDeliverToYou: 'Yay, we deliver to you!',
     deliveryTimeApprox: 'Delivery approx. 20–40 min',
     from: 'from',
@@ -444,6 +580,16 @@ export const translations: Record<Language, Translations> = {
     checkAnotherAddress: 'Check another address',
     callUs: 'Call',
     switchToPickupBrowse: 'Switch to pickup & browse',
+    switchToPickup: 'Switch to pickup',
+    addNewAddress: 'Add a new address',
+    addressBookSub: 'Pick a saved address or add a new one.',
+    saveAs: 'Save as',
+    labelHome: 'Home',
+    labelWork: 'Work',
+    labelOther: 'Other',
+    chooseFromSuggestions: 'Please pick an address from the suggestions',
+    saveAddress: 'Save address',
+    deleteAddress: 'Delete address',
     exploreShopAnyway: 'Explore the shop anyway',
     orderConfirmed: 'Order confirmed',
     orderConfirmedDeliverySub: 'The kitchen is preparing your food.',
@@ -474,6 +620,10 @@ export const translations: Record<Language, Translations> = {
     contactSupport: 'Contact support',
     changeLanguage: 'Change language',
     legal: 'Legal',
+    my: 'My',
+    quickAccess: 'Quick access',
+    myCart: 'My cart',
+    logoutConfirm: 'Are you sure you want to log out?',
     privacy: 'Privacy',
     terms: 'Terms',
     imprint: 'Imprint',
@@ -501,7 +651,7 @@ export const translations: Record<Language, Translations> = {
     supportHours: 'We’re here for you daily 10 AM – 11 PM',
     orderDetails: 'Order details',
     deliveredTo: 'Delivered to',
-    viewOrder: 'View',
+    viewOrder: 'View order',
     reorder: 'Reorder',
     status: 'Status',
     day: 'Day',
@@ -687,7 +837,40 @@ export const translations: Record<Language, Translations> = {
     added: 'Hinzugefügt',
     recommendedForYou: 'Für dich empfohlen',
     messageForRestaurant: 'Nachricht für das Restaurant',
-    messageForRestaurantPlaceholder: 'Spezielle Wünsche, Allergien, Ernährungshinweise…',
+    messageForRestaurantPlaceholder: 'Spezielle Wünsche, Allergien, Ernährungseinschränkungen oder Grußkartentext …',
+    messageForRestaurantHint: 'Sonderwünsche, Allergien oder Grußkartentext',
+    goToCheckout: 'Zur Kasse gehen',
+    loginWelcome: 'Willkommen bei',
+    loginSub: 'Melde dich an, um zu bestellen – oder bestelle direkt als Gast.',
+    continueAsGuest: 'Als Gast bestellen',
+    orDivider: 'oder',
+    legalNoticePrefix: 'Mit der Anmeldung akzeptierst du unsere',
+    legalNoticeAnd: 'und',
+    otpTitle: 'Bestätigungscode',
+    otpHeroTitle: 'Nur noch ein Schritt bis zu deiner Bestellung.',
+    otpHeroSub: 'Wir haben dir einen Code per SMS geschickt. Gib ihn hier ein, um fortzufahren.',
+    confirm: 'Bestätigen',
+    otpSentTo: 'Gesendet an',
+    resendOtp: 'Code erneut senden',
+    demoCode: 'Demo-Code',
+    active: 'Aktiv',
+    pastOrders: 'Frühere Bestellungen',
+    paymentCards: 'Kreditkarten',
+    paymentOtherMethods: 'Weitere Zahlungsmethoden',
+    addNewCard: 'Neue Karte hinzufügen',
+    onlinePayment: 'Online-Zahlung',
+    invoiceOrInstalments: 'Rechnung oder Ratenkauf',
+    statusAccepted: 'Angenommen',
+    isPreparingYourOrder: 'bereitet deine Bestellung zu',
+    skipToContent: 'Zum Inhalt springen',
+    voucherActivated: 'Gutschein aktiviert!',
+    saved: 'gespart',
+    menuLoadFailed: 'Speisekarte konnte nicht geladen werden',
+    menuLoadFailedSub: 'Du siehst gerade nur eine Auswahl. Bitte lade die Seite neu.',
+    reload: 'Neu laden',
+    cartEmpty: 'Dein Warenkorb ist leer',
+    cartEmptySub: 'Füge Gerichte hinzu, um zur Kasse zu gehen.',
+    addMoreItems: 'Weitere Artikel hinzufügen',
     save: 'Speichern',
     edit: 'Ändern',
     tip: 'Trinkgeld',
@@ -712,6 +895,34 @@ export const translations: Record<Language, Translations> = {
     doWeDeliverSub: 'Gib deine Adresse ein — wir prüfen sofort, ob du im Liefergebiet liegst.',
     streetHouseAndPostcode: 'Straße, Hausnr. & PLZ',
     useCurrentLocation: 'Aktuellen Standort verwenden',
+    checkDeliveryArea: 'Liefergebiet prüfen',
+    bellNameRequiredField: 'Klingelname (Pflichtfeld)',
+    callbackNumber: 'Rückrufnummer (Pflichtfeld)',
+    phoneForQuestions: 'Telefonnummer für Rückfragen (Pflichtfeld)',
+    redeem: 'Einlösen',
+    or: 'oder',
+    yourSavedDishes: 'Deine gespeicherten Gerichte',
+    orderedItems: 'Bestellte Artikel',
+    productInfo: 'Produktinfo',
+    addMore: 'Mehr hinzufügen',
+    paymentMethodsSummary: 'Bar, Karte, PayPal oder Klarna',
+    redeemCode: 'Code einlösen',
+    enterPromoCode: 'Rabatt- oder Promo-Code eingeben',
+    chooseDeliveryTime: 'Lieferzeit wählen',
+    soldOut: 'ausgebucht',
+    saveOnYourOrder: 'Spare bei deiner Bestellung',
+    enterCodeOrPickOffer: 'Code eingeben oder Aktion wählen',
+    voucherCode: 'GUTSCHEINCODE',
+    applied: 'Angewendet',
+    voucherActive: 'AKTIV',
+    availableOffers: 'Verfügbare Aktionen',
+    payNow: 'Jetzt bezahlen',
+    paymentFailed: 'Zahlung fehlgeschlagen',
+    paymentType: 'Zahlungsart',
+    callbackNumberShort: 'Rückrufnummer',
+    driverInstructions: 'Anweisungen für den Fahrer (z. B. Hintertür, 3. Stock)',
+    addressLookupUnavailable: 'Adresssuche nicht verfügbar',
+    addressLookupUnavailableSub: 'Wir können deine PLZ gerade nicht automatisch prüfen. Wähle Abholung oder ruf uns an – wir prüfen es für dich.',
     weDeliverToYou: 'Juhu, wir liefern zu dir!',
     deliveryTimeApprox: 'Lieferzeit ca. 20–40 Min',
     from: 'ab',
@@ -721,6 +932,16 @@ export const translations: Record<Language, Translations> = {
     checkAnotherAddress: 'Andere Adresse prüfen',
     callUs: 'Anrufen',
     switchToPickupBrowse: 'Zur Abholung wechseln & stöbern',
+    switchToPickup: 'Zur Abholung wechseln',
+    addNewAddress: 'Neue Adresse hinzufügen',
+    addressBookSub: 'Wähle eine gespeicherte Adresse oder füge eine neue hinzu.',
+    saveAs: 'Als was speichern?',
+    labelHome: 'Zuhause',
+    labelWork: 'Arbeit',
+    labelOther: 'Sonstige',
+    chooseFromSuggestions: 'Bitte wähle eine Adresse aus den Vorschlägen',
+    saveAddress: 'Adresse speichern',
+    deleteAddress: 'Adresse löschen',
     exploreShopAnyway: 'Trotzdem Webshop entdecken',
     orderConfirmed: 'Bestellung bestätigt',
     orderConfirmedDeliverySub: 'Die Küche bereitet dein Essen zu.',
@@ -751,6 +972,10 @@ export const translations: Record<Language, Translations> = {
     contactSupport: 'Kundenservice kontaktieren',
     changeLanguage: 'Sprache ändern',
     legal: 'Rechtliches',
+    my: 'Meine',
+    quickAccess: 'Schnellzugriff',
+    myCart: 'Mein Warenkorb',
+    logoutConfirm: 'Möchtest du dich wirklich abmelden?',
     privacy: 'Datenschutz',
     terms: 'AGB',
     imprint: 'Impressum',
@@ -778,7 +1003,7 @@ export const translations: Record<Language, Translations> = {
     supportHours: 'Wir sind täglich 10–23 Uhr für dich da',
     orderDetails: 'Bestelldetails',
     deliveredTo: 'Geliefert an',
-    viewOrder: 'Ansehen',
+    viewOrder: 'Bestellung ansehen',
     reorder: 'Erneut bestellen',
     status: 'Status',
     day: 'Tag',

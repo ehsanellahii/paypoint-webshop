@@ -44,8 +44,34 @@
   --color-brand-green: var(--brand-green);
   --color-brand-red: var(--brand-red);
   --color-star: var(--star);
+  --color-star-badge: var(--star-badge);
+  --color-star-rating: var(--star-rating);
   --color-border-strong: var(--border-strong);
   --color-muted-foreground-2: var(--muted-foreground-2);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-selected: var(--surface-selected);
+  --color-surface-suggest: var(--surface-suggest);
+  --color-control: var(--control);
+  --color-control-hover: var(--control-hover);
+  --color-control-light: var(--control-light);
+  --color-track: var(--track);
+  --color-outline-soft: var(--outline-soft);
+  --color-fg-strong: var(--fg-strong);
+  --color-fg-on-photo: var(--fg-on-photo);
+  --color-fg-on-photo-2: var(--fg-on-photo-2);
+  --color-fg-soft: var(--fg-soft);
+  --color-fg-secondary: var(--fg-secondary);
+  --color-fg-tertiary: var(--fg-tertiary);
+  --color-fg-disabled: var(--fg-disabled);
+  --color-fg-disabled-2: var(--fg-disabled-2);
+  --color-fg-hint: var(--fg-hint);
+  --color-fg-faint: var(--fg-faint);
+  --color-link: var(--link);
+  --color-error-text: var(--error-text);
+  --color-warning: var(--warning);
+  --color-live: var(--live);
+  --color-tip: var(--tip);
+  --color-delete: var(--delete);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -93,6 +119,62 @@ html {
   width: 4px;
 }
 
+/*
+ * Prototype `.thinbar`: an 8px scrollbar for panes that scroll inside a dialog.
+ * `overscroll-behavior: contain` is the point — without it, reaching the end of
+ * the cart list starts scrolling the page behind the modal.
+ */
+.thinbar {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.thinbar::-webkit-scrollbar {
+  width: 8px;
+}
+.thinbar::-webkit-scrollbar-thumb {
+  background: var(--elevated);
+  border-radius: 4px;
+}
+
+/* Prototype `.wztouch`: enforce the 44px minimum tap target on small screens. */
+@media (max-width: 640px) {
+  .wztouch {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/*
+ * Desktop shell width and gutters (the design's `.wzpad`), in one place rather
+ * than repeated as an arbitrary value across a dozen components.
+ *
+ * The design caps at `min(2160px, 100%)` — wider than it looks, because the
+ * menu grid gains a third column at 1700px. Gutter steps are the design's:
+ * 12 / 16 / 32 / 48px.
+ */
+.shell {
+  max-width: min(2160px, 100%);
+  margin-inline: auto;
+}
+.shell-pad {
+  padding-inline: 12px;
+}
+@media (min-width: 561px) {
+  .shell-pad {
+    padding-inline: 16px;
+  }
+}
+@media (min-width: 641px) {
+  .shell-pad {
+    padding-inline: 32px;
+  }
+}
+@media (min-width: 1700px) {
+  .shell-pad {
+    padding-inline: 48px;
+  }
+}
+
 /* Hide scrollbar */
 .scrollbar-hide {
   -ms-overflow-style: none;
@@ -109,13 +191,33 @@ html {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Focus styles */
+/*
+ * Focus styles.
+ *
+ * Text fields are deliberately excluded. Almost every input in the shop is a
+ * bare <input> sitting inside a bordered wrapper that also holds the icon —
+ * search bars, address fields, note textareas. An outline drawn around the
+ * input itself lands *inside* that wrapper, cutting across the icon and the
+ * clear button, so the focus state has to live on the wrapper instead.
+ */
 button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-textarea:focus-visible {
-  outline: 2px solid var(--color-primary);
+a:focus-visible {
+  /*
+   * A fixed blue, not the store accent: the ring has to stay legible on every
+   * surface, and a tenant whose accent is white or a dark brand colour would
+   * lose it entirely. This is the prototype's own value.
+   */
+  outline: 2px solid var(--link);
   outline-offset: 2px;
+}
+
+input:focus,
+input:focus-visible,
+textarea:focus,
+textarea:focus-visible,
+select:focus,
+select:focus-visible {
+  outline: none;
 }
 
 /* Line clamp utility */
@@ -126,13 +228,45 @@ textarea:focus-visible {
   overflow: hidden;
 }
 
-/* Scroll margin for anchor navigation */
-.scroll-mt-24 {
-  scroll-margin-top: 6rem;
+/*
+ * Anchor offset for the category sections.
+ *
+ * One source of truth: the nav scrolls with `scrollIntoView`, which honours
+ * scroll-margin, so the sticky header stack is accounted for here and nowhere
+ * else. It used to be duplicated as a hardcoded pixel offset in the nav and a
+ * different `scroll-mt` on the section, so the two disagreed and jumps landed
+ * short. The larger mobile value covers the search row that only exists there.
+ */
+.menu-anchor {
+  scroll-margin-top: 100px;
+}
+@media (max-width: 640px) {
+  .menu-anchor {
+    scroll-margin-top: 210px;
+  }
 }
 
 /*
- * Fixed DARK shell (Little Italy prototype palette), mapped onto the existing
+ * Product-modal photo. Height is capped against the *viewport* height so the
+ * options below it stay reachable on a short laptop screen — a media query,
+ * because Tailwind has no max-height variant.
+ */
+.pmimg {
+  height: 340px;
+}
+@media (max-height: 760px) {
+  .pmimg {
+    height: 220px;
+  }
+}
+@media (max-height: 600px) {
+  .pmimg {
+    height: 150px;
+  }
+}
+
+/*
+ * Fixed dark shell (desktop design palette), mapped onto the existing
  * design tokens so bg-card / text-muted-foreground / border-border etc. all
  * follow automatically. --primary and --selected-text remain the per-store
  * accent (set at runtime by ThemeVars); the values here are fallbacks used
@@ -175,6 +309,44 @@ textarea:focus-visible {
   --destructive: #ff6b5e;
   --star: #ffb800;
 
+  /*
+   * Every value below is lifted verbatim from the desktop design's
+   * inline styles. The comment on each line is where the prototype uses it —
+   * check against the design file before changing one.
+   */
+
+  /* Interaction surfaces */
+  --surface-hover: #232325; /* ghost / outlined button hover, unselected day+time chips */
+  --surface-selected: #2f3033; /* selected radio and option rows */
+  --surface-suggest: #303034; /* autocomplete row hover */
+  --control: #3a3a3e; /* small round controls — search clear, stepper minus */
+  --control-hover: #4a4a4f;
+  --control-light: #f0f0f2; /* minus button inside a white stepper */
+  --track: #3a3c40; /* inactive progress-bar segment */
+  --outline-soft: #45474b; /* dashed borders — add address, referral code */
+
+  /* Neutral text ramp, lightest to darkest */
+  --fg-strong: #e7e8ea; /* item names in summaries, benefit rows */
+  --fg-on-photo: #d6d8dc; /* eyebrows and sub-lines over photos */
+  --fg-on-photo-2: #cfd2d6; /* wordmark separator, OTP hero copy */
+  --fg-soft: #c4c6ca; /* product-modal price and info text */
+  --fg-secondary: #b9bbbf; /* inactive segment labels, summary values */
+  --fg-tertiary: #a9adb3; /* order-card summary, invite copy */
+  --fg-disabled: #9a9da3; /* disabled place-order label, empty-state icon */
+  --fg-disabled-2: #7a7d83; /* disabled save-address label */
+  --fg-hint: #5c5e63; /* "· optional" next to a section label */
+  --fg-faint: #55575c; /* chevrons, unselected radio ring, empty-state glyphs */
+
+  /* Semantic */
+  --link: #7fb2ff; /* "Restaurantdetails" link and the global focus ring */
+  --error-text: #ff8a7e; /* inline field errors */
+  --warning: #ff8a5c; /* menu-failure banner, recommendation price */
+  --live: #ef4444; /* LIVE order badge */
+  --tip: #e8859a; /* tip-thanks heart */
+  --delete: #ff5247; /* destructive row action */
+  --star-badge: #e8b24a; /* "Beliebt" star on a product card */
+  --star-rating: #f5b942; /* rating star in the restaurant-info modal */
+
   --border: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.16);
   --input: rgba(255, 255, 255, 0.1);
@@ -193,6 +365,45 @@ textarea:focus-visible {
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: rgba(255, 255, 255, 0.08);
   --sidebar-ring: rgba(255, 255, 255, 0.25);
+}
+
+/*
+ * ============================================================
+ * Mobile palette (mobile design, `mobile.html`)
+ * ============================================================
+ *
+ * Mobile and desktop are two different designs, not one theme with variants:
+ * desktop stays on the near-black greys, mobile is navy with a light-blue CTA.
+ * Rather than a second set of class names, the same token names resolve to the
+ * mobile values under the `data-device` stamp that `proxy.ts` sets — so
+ * every existing `bg-card` / `text-muted-foreground` / `border-border` follows
+ * automatically and only the surfaces and the accent change.
+ *
+ * Roles were read off the prototype's own usage (background vs border vs
+ * color), not guessed from frequency. Text ramp, border alphas and the
+ * success / danger colours are identical to desktop and so are not repeated.
+ */
+[data-device='mobile'] {
+  --background: #0c0f1c; /* page */
+  --card: #191c2e; /* cards, sheets — the dominant surface (68 uses) */
+  --popover: #191c2e;
+
+  --surface-1: #151827; /* inset panels */
+  --surface-2: #22263c;
+  --surface-3: #262b42; /* raised rows */
+  --elevated: #303650; /* controls, dashed borders */
+  --border-strong: #3d4360; /* unselected control outline */
+
+  --muted: #151827;
+  --accent: #22263c;
+  --secondary: #262b42;
+  --surface-suggest: #22263c; /* autocomplete row hover */
+
+  /* CTA blue, with the page navy as its foreground. Still only a fallback —
+     ThemeVars overrides both when a store defines its own accent. */
+  --primary: #8ad0f2;
+  --primary-foreground: #06131f;
+  --selected-text: #06131f;
 }
 
 /*
@@ -233,7 +444,7 @@ textarea:focus-visible {
 }
 
 /* ============================================================
-   Prototype animation library (Little Italy)
+   Prototype animation library (desktop design)
    Reused across menu, cart, checkout, confirmation, account.
    ============================================================ */
 @keyframes wzpop {
@@ -252,6 +463,10 @@ textarea:focus-visible {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-7px); }
 }
+@keyframes imgfade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 @keyframes wzfade {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: none; }
@@ -265,6 +480,7 @@ textarea:focus-visible {
   0% { background-position: -200px 0; }
   100% { background-position: calc(200px + 100%) 0; }
 }
+
 @keyframes wzpulse {
   0% { box-shadow: 0 0 0 0 rgba(70, 209, 127, 0.5); }
   70% { box-shadow: 0 0 0 8px rgba(70, 209, 127, 0); }
@@ -312,6 +528,14 @@ textarea:focus-visible {
 
 .anim-pop { animation: wzpop 0.4s ease both; }
 .anim-fade { animation: wzfade 0.35s ease both; }
+/*
+ * Fade a loaded picture in over its shimmer.
+ *
+ * The design uses `wzfade` here, which also lifts the image 12px. Opacity only,
+ * because `animation-fill-mode: both` would then pin `transform: none` on the
+ * element for good — and the product card's hover zoom is a transform.
+ */
+.img-fade-in { animation: imgfade 0.3s ease both; }
 .anim-scalein { animation: wzscalein 0.22s ease both; }
 .anim-drawer { animation: wzdrawer 0.28s cubic-bezier(0.22, 0.8, 0.3, 1) both; }
 .anim-heartin { animation: wzheartIn 0.3s ease both; }
@@ -320,19 +544,78 @@ textarea:focus-visible {
 .anim-pulse-ring { animation: wzpulse 2.2s ease-out infinite; }
 .anim-spin { animation: wzspin 0.7s linear infinite; }
 
-/* Shimmer image placeholder */
+/* Bottom sheets on mobile slide up from the edge rather than scaling in. */
+@keyframes dzslideup {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/*
+ * Row removal: fade and slide, then collapse the height so the rows below
+ * close the gap rather than jumping up. `max-height` is animated because the
+ * row's real height is content-dependent and cannot be known up front.
+ */
+@keyframes dzremove {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+    max-height: 120px;
+  }
+  40% {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(12px);
+    opacity: 0;
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-top: 0;
+  }
+}
+.anim-remove {
+  animation: dzremove 0.32s ease forwards;
+  overflow: hidden;
+}
+
+/*
+ * Skeleton blocks, and the placeholder under a picture that is still loading:
+ * a highlight sweeping across the surface. The base colour is a token rather
+ * than the design's literal `#26262a`, so the mobile palette re-scopes it along
+ * with every other surface.
+ *
+ * `SmartImage` drops the class the moment the image loads — an infinite
+ * animation left running behind an opaque picture keeps the compositor busy for
+ * nothing.
+ */
 .img-shimmer {
   background: var(--surface-2) linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.06) 40%, transparent 60%) no-repeat;
   background-size: 200px 100%;
   animation: wzshim 1.2s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .img-shimmer,
+  .img-fade-in {
+    animation: none;
+  }
 }
 
 /* Utility to hide horizontal scrollbars on category bars etc. */
 .noscroll::-webkit-scrollbar { width: 0; height: 0; }
 .noscroll { scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
 
-/* Lock body scroll when an overlay is open */
-body.overlay-open { overflow: hidden; }
+/*
+ * Body scroll lock, set by full-screen overlays that own the viewport (the
+ * delivery-zone gate). Without it the page keeps scrolling behind the overlay.
+ */
+body.overlay-open {
+  overflow: hidden;
+}
 
 /* Tap highlight off for the app */
 * { -webkit-tap-highlight-color: transparent; }

@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Check, FileText, MapPin, CreditCard, Loader2, HelpCircle, ChevronRight, ChevronLeft } from 'lucide-react';
+import { FileText, MapPin, CreditCard, Loader2, HelpCircle, ChevronRight, ChevronLeft } from 'lucide-react';
 
 import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
 import { useStoreNavigation } from '~/hooks/useStoreNavigation';
 import { formatPrice } from '~/lib/api';
-import { buildStaticMap, buildRouteMap } from '~/lib/staticMap';
-import { getPlacedOrder, type PlacedOrder } from '~/lib/lastOrder';
+import { buildStaticMap } from '~/lib/staticMap';
+import RouteMap from '~/components/checkout/RouteMap';
+import { fetchPlacedOrder, getPlacedOrder, type PlacedOrder } from '~/lib/lastOrder';
 import { useAddress } from '~/contexts/address-context';
 import ShopHeaderMinimal from '~/components/menu/ShopHeaderMinimal';
 import UserDrawer from '~/components/Header/UserDrawer';
@@ -23,33 +24,75 @@ export default function ConfirmationScreen() {
   const searchParams = useSearchParams();
   const orderRef = searchParams?.get('order') || '';
 
-  const [order, setOrder] = useState<PlacedOrder | null>(null);
-  const [hydrated, setHydrated] = useState(false);
+  /*
+   * The placed order lives in sessionStorage, so it can only be read after
+   * mount — the server has no access to it and rendering it during the first
+   * pass would break hydration. The ETA window is resolved here too: it is
+   * derived from the clock, and reading `Date.now()` during render makes the
+   * displayed time drift on every re-render.
+   *
+   * One state object rather than three so this settles in a single commit.
+   */
+  const [state, setState] = useState<{ order: PlacedOrder | null; etaWindow: string | null; hydrated: boolean }>({
+    order: null,
+    etaWindow: null,
+    hydrated: false,
+  });
   const [accountOpen, setAccountOpen] = useState(false);
 
   useEffect(() => {
-    setOrder(getPlacedOrder(slug, orderRef));
-    setHydrated(true);
+    let cancelled = false;
+
+    const etaWindowFor = (placed: PlacedOrder | null) => {
+      if (!placed || placed.etaLabel || placed.status) return null;
+      const fmt = (ms: number) => {
+        const d = new Date(ms);
+        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      };
+      const now = Date.now();
+      return `${fmt(now + placed.etaLo * 60000)} – ${fmt(now + placed.etaHi * 60000)}`;
+    };
+
+    /*
+     * The order comes from the API, keyed by the reference in the URL, so this
+     * screen works for any order — one just placed, one opened from the order
+     * list, or a reloaded link. The session snapshot is only a first paint for
+     * the order just placed, so the page is not blank while the request runs.
+     */
+    const snapshot = getPlacedOrder(slug, orderRef);
+    setState({ order: snapshot, etaWindow: etaWindowFor(snapshot), hydrated: !orderRef });
+
+    if (!orderRef) return;
+    fetchPlacedOrder(orderRef)
+      .then((fetched) => {
+        if (cancelled) return;
+        const order = fetched ?? snapshot;
+        setState({ order, etaWindow: etaWindowFor(order), hydrated: true });
+      })
+      .catch(() => !cancelled && setState({ order: snapshot, etaWindow: etaWindowFor(snapshot), hydrated: true }));
+
+    return () => {
+      cancelled = true;
+    };
   }, [slug, orderRef]);
+
+  const { order, etaWindow, hydrated } = state;
 
   const isDelivery = order?.isDelivery ?? false;
 
-  const now = Date.now();
-  const fmtTime = (ms: number) => {
-    const d = new Date(ms);
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  };
   // A viewed past order carries `status`; a freshly placed one does not.
   const isPast = !!order?.status;
   const statusMeta = order?.status ? getStatusMeta(order.status, t) : null;
-  const eta = order?.etaLabel ?? (isPast ? (statusMeta?.label ?? '—') : order ? `${fmtTime(now + order.etaLo * 60000)} – ${fmtTime(now + order.etaHi * 60000)}` : '—');
+  const eta = order?.etaLabel ?? (isPast ? (statusMeta?.label ?? '—') : (etaWindow ?? '—'));
   const isScheduled = !isPast && !!order?.etaLabel;
 
   const mapKey = storeInfo?.posGoogleApiKey || storeInfo?.adminGoogleApiKey || '';
   const storeCoord = storeInfo?.coordinates ? { lat: storeInfo.coordinates.latitude, lng: storeInfo.coordinates.longitude } : null;
   // Delivery: draw the store → customer route line. Fall back to a single
   // customer marker if the store has no coordinates.
-  const routeUrl = isDelivery && deliveryAddress ? buildRouteMap(storeCoord, { lat: deliveryAddress.lat, lng: deliveryAddress.lng }, mapKey, 560, 260) : '';
+  const customerCoord = deliveryAddress?.lat && deliveryAddress?.lng ? { lat: deliveryAddress.lat, lng: deliveryAddress.lng } : null;
+  const canRoute = !!(isDelivery && storeCoord && customerCoord && mapKey);
+  const routeUrl = '';
   const mapUrl = routeUrl || (isDelivery && deliveryAddress ? buildStaticMap(deliveryAddress.lat, deliveryAddress.lng, mapKey, 560, 260) : '');
 
   if (!hydrated) {
@@ -72,19 +115,36 @@ export default function ConfirmationScreen() {
           {t.backToHome ?? 'Back to home'}
         </button>
 
-        {/* Success hero */}
-        <div className='mb-7 flex flex-col items-center text-center'>
-          <div className='relative flex h-[84px] w-[84px] items-center justify-center'>
-            <div className='absolute inset-0 rounded-full bg-success/10' />
-            <div className='absolute inset-[11px] rounded-full bg-success/20' />
-            <div className='anim-pop relative flex h-[54px] w-[54px] items-center justify-center rounded-full bg-success'>
-              <Check className='h-7 w-7 text-[#0f2a1a]' strokeWidth={2.6} />
+        {/*
+          Receipt-style header: status and headline on the left, order number and
+          ETA set apart on the right behind a dashed rule — the design swapped the
+          centred success disc for this. Stacks below 640px, where the dashed rule
+          moves from the left edge to the top.
+        */}
+        <div className='mb-[30px] flex flex-col items-start justify-between gap-[18px] border-b border-border pb-[26px] min-[641px]:flex-row min-[641px]:gap-6'>
+          <div className='min-w-0'>
+            <div className='inline-flex items-center gap-2 rounded-lg border border-success/30 bg-success/12 px-[11px] py-[5px]'>
+              <span className='h-1.5 w-1.5 rounded-full bg-success' />
+              <span className='text-[11.5px] font-extrabold uppercase tracking-[0.06em] text-[#7fd083]'>
+                {isPast ? (statusMeta?.label ?? t.statusAccepted) : t.statusAccepted}
+              </span>
             </div>
+            <h1 className='m-0 mt-3.5 text-[30px] font-extrabold leading-[1.1] tracking-[-0.025em]'>
+              {isPast ? (t.orderDetails ?? 'Order details') : `${storeInfo?.brandName ?? ''} ${t.isPreparingYourOrder}`.trim()}
+            </h1>
+            <p className='mt-2.5 max-w-[420px] text-[14.5px] font-medium leading-relaxed text-muted-foreground'>
+              {isPast ? `${t.order ?? 'Order'} ${order?.orderRef}` : isScheduled ? `${t.preorder} · ${order?.etaLabel}` : (t.orderConfirmedDeliverySub ?? '')}
+            </p>
           </div>
-          <h1 className='mt-4 text-[30px] font-extrabold tracking-tight'>{isPast ? (t.orderDetails ?? 'Order details') : (t.orderConfirmed ?? 'Order confirmed')}</h1>
-          <p className='mt-2 max-w-[380px] text-sm font-medium leading-relaxed text-muted-foreground'>
-            {isPast ? `${t.order ?? 'Order'} ${order?.orderRef}` : isScheduled ? `${t.preorder} · ${order?.etaLabel}` : (t.orderConfirmedDeliverySub ?? 'The kitchen is preparing your food.')}
-          </p>
+
+          <div className='w-full shrink-0 border-t border-dashed border-border-strong pt-4 text-left min-[641px]:w-auto min-[641px]:border-l min-[641px]:border-t-0 min-[641px]:pl-6 min-[641px]:pt-0 min-[641px]:text-right'>
+            <div className='text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground-2'>{t.orderNumber ?? 'Order'}</div>
+            <div className='mt-1 font-mono text-[20px] font-bold tracking-[0.02em]'>{order?.orderRef || orderRef || '—'}</div>
+            <div className='mt-3.5 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground-2'>
+              {isPast ? (t.status ?? 'Status') : isDelivery ? (t.estimatedDelivery ?? '') : (t.readyForPickup ?? '')}
+            </div>
+            <div className='mt-1 text-[22px] font-extrabold tracking-[-0.02em]'>{eta}</div>
+          </div>
         </div>
 
         {!order ? (
@@ -104,9 +164,16 @@ export default function ConfirmationScreen() {
             {/* LEFT — tracking */}
             <div className='flex flex-col gap-4'>
               <div className='overflow-hidden rounded-[22px] border border-border bg-surface-1'>
-                <div
-                  className='relative h-[240px] bg-surface-3 bg-cover bg-center'
-                  style={mapUrl ? { backgroundImage: `url("${mapUrl}")` } : { background: 'linear-gradient(135deg,#26262a,#141416)' }}>
+                {/* Same route map as checkout — real pins, framed to the line. */}
+                <div className='relative'>
+                  {canRoute ? (
+                    <RouteMap store={storeCoord!} customer={customerCoord!} apiKey={mapKey} width={560} height={240} />
+                  ) : (
+                    <div
+                      className='h-[240px] bg-surface-3 bg-cover bg-center'
+                      style={mapUrl ? { backgroundImage: `url("${mapUrl}")` } : { background: 'linear-gradient(135deg,#26262a,#141416)' }}
+                    />
+                  )}
                   <div className='absolute left-4 top-4 inline-flex h-[34px] items-center gap-2 rounded-[11px] bg-[rgba(15,15,17,0.78)] px-3.5 text-[12.5px] font-bold text-success backdrop-blur'>
                     <span className='h-2 w-2 rounded-full bg-success shadow-[0_0_0_4px_rgba(70,209,127,0.25)]' />
                     {isPast ? (statusMeta?.label ?? '') : isScheduled ? (t.preorder ?? 'Pre-ordered') : (t.inProgress ?? 'In progress')}
@@ -117,8 +184,8 @@ export default function ConfirmationScreen() {
                   <div className='mt-1 text-[30px] font-extrabold tracking-tight'>{eta}</div>
                   <div className='mt-4 flex gap-1.5'>
                     <div className='h-[5px] flex-1 rounded-[3px] bg-success' />
-                    <div className='h-[5px] flex-1 rounded-[3px] bg-[#3a3c40]' />
-                    <div className='h-[5px] flex-1 rounded-[3px] bg-[#3a3c40]' />
+                    <div className='h-[5px] flex-1 rounded-[3px] bg-track' />
+                    <div className='h-[5px] flex-1 rounded-[3px] bg-track' />
                   </div>
                   <div className='mt-2.5 flex justify-between text-xs font-semibold text-muted-foreground'>
                     <span className='text-white'>{t.preparation ?? 'Preparation'}</span>
@@ -173,7 +240,7 @@ export default function ConfirmationScreen() {
                   <div className='text-[15px] font-bold'>{t.problemWithOrder ?? 'Problem with your order?'}</div>
                   <div className='mt-0.5 text-[12.5px] font-medium text-muted-foreground'>{t.helpAndSupport ?? 'Help & support'}</div>
                 </div>
-                <ChevronRight className='h-[17px] w-[17px] shrink-0 text-[#55575c]' />
+                <ChevronRight className='h-[17px] w-[17px] shrink-0 text-fg-faint' />
               </button>
             </div>
 
@@ -185,7 +252,7 @@ export default function ConfirmationScreen() {
                   <div key={i} className='flex items-center gap-3'>
                     <div className='w-6 shrink-0 text-sm font-extrabold'>{item.qty}×</div>
                     <div className='h-[42px] w-[42px] shrink-0 rounded-[11px] bg-white bg-cover bg-center' style={item.image ? { backgroundImage: `url("${item.image}")` } : undefined} />
-                    <div className='min-w-0 flex-1 text-[13.5px] font-semibold leading-tight text-[#e7e8ea]'>{item.name}</div>
+                    <div className='min-w-0 flex-1 text-[13.5px] font-semibold leading-tight text-fg-strong'>{item.name}</div>
                     <div className='shrink-0 text-sm font-bold'>{formatPrice(item.lineTotal)}</div>
                   </div>
                 ))}

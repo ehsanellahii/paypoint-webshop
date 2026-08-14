@@ -1,18 +1,17 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useStoreNavigation } from '~/hooks/useStoreNavigation';
 import Image from 'next/image';
-import { ChevronDown, Loader2, Receipt, Eye, RotateCcw } from 'lucide-react';
+import { ChevronDown, Loader2, Receipt, ChevronRight, ShoppingBag } from 'lucide-react';
 import { API_BASE_URL, formatPrice as apiFormatPrice, X_API_KEY } from '@/lib/api';
 import { cn, getImageURL, MenuProduct } from '~/lib/utils';
 import { useUser } from '~/contexts/user-context';
 import { useLanguage } from '@/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
 import { useCart } from '~/contexts/cart-context';
-import { useStoreNavigation } from '~/hooks/useStoreNavigation';
-import { savePlacedOrder } from '~/lib/lastOrder';
 import SmartImage from '~/lib/SmartImage';
+import OrderDetailModal from './OrderDetailModal';
 
 /** ---- Types ---- */
 type OrderAddOn = { id: string; uid: string; name: string; quantity: number; price: number };
@@ -80,18 +79,20 @@ export function getStatusMeta(status?: string, t?: any) {
     isDelivered: t?.isDelivered ?? 'Delivered',
     isCancelled: t?.isCancelled ?? 'Cancelled',
   };
+  // Tinted on the dark shell — the light-theme chips these used to be were
+  // unreadable against `bg-card`.
   const base = 'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold';
   switch (st) {
     case 'isCancelled':
-      return { label: labelMap[st], className: cn(base, 'bg-red-100 text-red-700') };
+      return { label: labelMap[st], className: cn(base, 'bg-destructive/12 text-destructive') };
     case 'isDelivered':
-      return { label: labelMap[st], className: cn(base, 'bg-green-100 text-green-700') };
+      return { label: labelMap[st], className: cn(base, 'bg-success/12 text-success') };
     case 'inDelivery':
-      return { label: labelMap[st], className: cn(base, 'bg-blue-100 text-blue-700') };
+      return { label: labelMap[st], className: cn(base, 'bg-link/12 text-link') };
     case 'sentToStore':
-      return { label: labelMap[st], className: cn(base, 'bg-yellow-100 text-yellow-800') };
+      return { label: labelMap[st], className: cn(base, 'bg-star/12 text-star') };
     default:
-      return { label: status || 'Unknown', className: cn(base, 'bg-gray-100 text-foreground') };
+      return { label: status || 'Unknown', className: cn(base, 'bg-surface-3 text-muted-foreground') };
   }
 }
 const getOrderTypeMeta = (type?: string, t?: any) => (type === 'delivery' ? t.delivery : type === 'pickup' ? t.pickup : type === 'dineIn' ? t.dineIn : t.unknown);
@@ -146,7 +147,6 @@ export default function OrdersPanel({
   const { user } = useUser();
   const storeInfo = useStore();
   const { addToCart } = useCart();
-  const { slug, toConfirmation } = useStoreNavigation();
   const logoURL = storeInfo?.settings?.logo || '';
   const userId = user?.id ?? user?._id;
 
@@ -154,28 +154,15 @@ export default function OrdersPanel({
   const [err, setErr] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [detail, setDetail] = useState<Order | null>(null);
+  const { toConfirmation } = useStoreNavigation();
 
-  // "View" opens the confirmation-style page. Persist a snapshot of the chosen
-  // order and navigate; the confirmation screen reads it back by order ref.
-  const viewOrder = useCallback(
-    (o: Order) => {
-      const isDelivery = o.orderType === 'delivery';
-      savePlacedOrder(slug, {
-        orderRef: o.collectionCode,
-        isDelivery,
-        paymentName: o.paymentMethod === 'cash' ? t.cash : o.paymentMethod === 'ec-card reader' ? t.posCardPayment : o.paymentMethod,
-        total: o.totalOrderPrice,
-        etaLo: 0,
-        etaHi: 0,
-        addressLine: isDelivery ? (o.addressDetails?.address ?? '') : `${o.storeDetails?.name ?? ''}${o.storeDetails?.address ? ` · ${o.storeDetails.address}` : ''}`,
-        items: (o.items || []).map((it) => ({ name: it.name, qty: it.quantity, lineTotal: it.totalPrice, image: it.image ? getImageURL(it.image) : '' })),
-        status: o.status,
-        placedAt: new Date(o.orderDate).getTime() || Date.now(),
-      });
-      toConfirmation(o.collectionCode);
-    },
-    [slug, t, toConfirmation]
-  );
+  /*
+   * Clicking an order opens the confirmation screen for it, which is the same
+   * view the customer saw when they placed it — it reads the order back from
+   * the API by the reference in the URL.
+   */
+  const openOrder = useCallback((o: Order) => toConfirmation(o.collectionCode || String(o.orderNumber || o.id)), [toConfirmation]);
 
   // Re-add an order's items to the cart. Add-ons aren't reconstructed (the
   // history summary doesn't carry group ids); the server reprices on submit.
@@ -208,17 +195,7 @@ export default function OrdersPanel({
     setLoading(true);
     setErr(null);
     try {
-      const res = await fetch(`${API_BASE_URL}/orders/${encodeURIComponent(userId)}`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': X_API_KEY },
-        cache: 'no-store',
-      });
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(text || `Request failed (${res.status})`);
-      }
-      const data = (await res.json()) as OrdersResponse | Order[];
-      const list = Array.isArray(data) ? data : (data?.data ?? []);
+      const list = await fetchUserOrders(userId);
       setOrders(list);
       onLoaded?.(list.length);
       // Auto-expand the most recent order in the full (dialog) view only.
@@ -240,11 +217,15 @@ export default function OrdersPanel({
     if (active) fetchOrders();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, userId]);
-
+  console.log('compact', compact);
   return (
     <div className={wrapperClassName ?? 'flex-1 overflow-y-auto scrollbar-hide px-2 py-4 md:px-6'}>
       {!userId ? (
-        <EmptyState icon={<Receipt className='h-10 w-10' />} title={t?.pleaseLogin ?? 'Please login'} subtitle={t?.loginToSeeOrders ?? 'Login to see your order history.'} />
+        <EmptyState
+          icon={<Receipt className='h-10 w-10' />}
+          title={t?.pleaseLogin ?? 'Please login'}
+          subtitle={t?.loginToSeeOrders ?? 'Login to see your order history.'}
+        />
       ) : loading ? (
         <div className='flex h-[60vh] items-center justify-center'>
           <div className='flex items-center gap-2 text-muted-foreground'>
@@ -261,9 +242,17 @@ export default function OrdersPanel({
           </button>
         </div>
       ) : orders.length === 0 ? (
-        <EmptyState icon={<Receipt className='h-10 w-10' />} title={t?.noOrdersYet ?? 'No orders yet'} subtitle={t?.yourOrdersWillAppearHere ?? 'Your recent orders will appear here.'} />
+        compact ? (
+          <OrdersEmpty t={t} onBrowse={onReordered} />
+        ) : (
+          <EmptyState
+            icon={<Receipt className='h-10 w-10' />}
+            title={t?.noOrdersYet ?? 'No orders yet'}
+            subtitle={t?.yourOrdersWillAppearHere ?? 'Your recent orders will appear here.'}
+          />
+        )
       ) : compact ? (
-        <OrdersCompact orders={orders} onView={viewOrder} onReorder={reorder} logoURL={logoURL} t={t} />
+        <OrdersCompact orders={orders} onView={openOrder} onReorder={reorder} logoURL={logoURL} t={t} />
       ) : (
         <div className='space-y-3'>
           {orders
@@ -275,7 +264,9 @@ export default function OrdersPanel({
               const meta = getStatusMeta(o.status, t);
               return (
                 <div key={o.id} className='overflow-hidden rounded-lg bg-surface-1'>
-                  <button onClick={() => setExpanded((p) => ({ ...p, [o.id]: !p[o.id] }))} className='flex w-full items-center gap-3 p-4 text-left transition hover:bg-surface-2'>
+                  <button
+                    onClick={() => setExpanded((p) => ({ ...p, [o.id]: !p[o.id] }))}
+                    className='flex w-full items-center gap-3 p-4 text-left transition hover:bg-surface-2'>
                     <div className='min-w-0 flex-1'>
                       <div className='flex flex-wrap items-center justify-between gap-3'>
                         <div className='truncate font-semibold text-foreground'>
@@ -341,7 +332,9 @@ export default function OrdersPanel({
                                 </div>
                                 <div className='shrink-0 text-right'>
                                   <div className='font-semibold text-foreground'>{apiFormatPrice(it.totalPrice)}</div>
-                                  {(it.discount || 0) > 0 && <div className='text-xs text-muted-foreground line-through'>{apiFormatPrice((it.originalPrice || 0) * (it.quantity || 1))}</div>}
+                                  {(it.discount || 0) > 0 && (
+                                    <div className='text-xs text-muted-foreground line-through'>{apiFormatPrice((it.originalPrice || 0) * (it.quantity || 1))}</div>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -351,18 +344,29 @@ export default function OrdersPanel({
 
                       <div className='mt-4 grid gap-2 text-sm'>
                         <Row label={t?.itemsTotal ?? 'Items total'} value={apiFormatPrice(o.totalItemsPrice)} />
-                        {!!o.deliveryCharges && o.deliveryCharges > 0 && <Row label={t?.deliveryCharges ?? 'Delivery charges'} value={apiFormatPrice(o.deliveryCharges)} />}
-                        {o.isVoucherApplied && (o.discountAmount || 0) > 0 && <Row label={t?.discount ?? 'Discount'} value={`- ${apiFormatPrice(o.discountAmount)}`} valueClassName='font-semibold text-success' />}
+                        {!!o.deliveryCharges && o.deliveryCharges > 0 && (
+                          <Row label={t?.deliveryCharges ?? 'Delivery charges'} value={apiFormatPrice(o.deliveryCharges)} />
+                        )}
+                        {o.isVoucherApplied && (o.discountAmount || 0) > 0 && (
+                          <Row label={t?.discount ?? 'Discount'} value={`- ${apiFormatPrice(o.discountAmount)}`} valueClassName='font-semibold text-success' />
+                        )}
                         <Row label={`${t?.tax ?? 'Tax'} (${o.taxRate}%)`} value={apiFormatPrice(o.taxAmount)} />
                         <div className='my-1 border-t border-border' />
-                        <Row label={t?.totalIncludingVAT ?? 'Total'} value={apiFormatPrice(o.totalOrderPrice)} labelClassName='font-bold' valueClassName='font-bold text-foreground' />
+                        <Row
+                          label={t?.totalIncludingVAT ?? 'Total'}
+                          value={apiFormatPrice(o.totalOrderPrice)}
+                          labelClassName='font-bold'
+                          valueClassName='font-bold text-foreground'
+                        />
                       </div>
 
                       {/* Payment / customer / address / voucher details — full (dialog) view only */}
                       {!compact && (
                         <div className='mt-4 grid grid-cols-1 gap-3 md:grid-cols-2'>
                           <InfoCard title={t?.paymentMethod ?? 'Payment'}>
-                            <div className='text-sm text-foreground'>{o.paymentMethod === 'cash' ? t.cash : o.paymentMethod === 'ec-card reader' ? t.posCardPayment : o.paymentMethod}</div>
+                            <div className='text-sm text-foreground'>
+                              {o.paymentMethod === 'cash' ? t.cash : o.paymentMethod === 'ec-card reader' ? t.posCardPayment : o.paymentMethod}
+                            </div>
                           </InfoCard>
                           <InfoCard title={t?.customer ?? 'Customer'}>
                             <div className='text-sm text-foreground'>{o.customerDetails?.name}</div>
@@ -396,47 +400,196 @@ export default function OrdersPanel({
             })}
         </div>
       )}
+
+      <OrderDetailModal
+        order={detail}
+        onClose={() => setDetail(null)}
+        onReorder={(o) => {
+          reorder(o);
+          setDetail(null);
+        }}
+      />
     </div>
   );
 }
 
-/** Compact drawer list; "View" opens the confirmation page, matching the prototype. */
-function OrdersCompact({ orders, onView, onReorder, logoURL, t }: { orders: Order[]; onView: (o: Order) => void; onReorder: (o: Order) => void; logoURL: string; t: any }) {
+/** Prototype `ordersEmpty`: a floating bag glyph over two soft discs, then a CTA. */
+/*
+ * Empty state on the design's own pattern (it shows one for favourites; orders
+ * simply had none drawn): a disc, a heading, a line of explanation, and a way
+ * out to the menu. The last part was missing — the panel said there was nothing
+ * here and left the customer to find their own way back.
+ */
+function OrdersEmpty({ t, onBrowse }: { t: any; onBrowse?: () => void }) {
+  return (
+    <div className='anim-fade flex flex-col items-center px-[30px] pb-8 pt-12 text-center'>
+      <div className='flex h-[74px] w-[74px] items-center justify-center rounded-full bg-card'>
+        <ShoppingBag className='h-8 w-8 text-fg-disabled' strokeWidth={1.6} />
+      </div>
+      <div className='mt-[18px] text-[17px] font-extrabold'>{t?.noOrdersYet ?? 'No orders yet'}</div>
+      <p className='mt-[7px] max-w-[300px] text-[13.5px] font-medium leading-[1.5] text-muted-foreground'>{t?.yourOrdersWillAppearHere ?? ''}</p>
+      {onBrowse && (
+        <button
+          onClick={onBrowse}
+          className='mt-5 rounded-[14px] bg-primary px-[22px] py-[13px] text-sm font-extrabold text-selected-text transition active:scale-[0.97]'>
+          {t?.continueToMenu ?? 'Explore menu'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The customer's orders. Exported because the desktop order-details page needs
+ * the same call — the integration API has no "one order by id" endpoint, so a
+ * details view fetches the list and picks its order out of it.
+ */
+export async function fetchUserOrders(userId: string): Promise<Order[]> {
+  const res = await fetch(`${API_BASE_URL}/orders/${encodeURIComponent(userId)}`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': X_API_KEY },
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `Request failed (${res.status})`);
+  }
+  const data = (await res.json()) as OrdersResponse | Order[];
+  return Array.isArray(data) ? data : (data?.data ?? []);
+}
+
+/** Compact drawer list, split into the active order and past orders. */
+function OrdersCompact({
+  orders,
+  onView,
+  onReorder,
+  logoURL,
+  t,
+}: {
+  orders: Order[];
+  onView: (o: Order) => void;
+  onReorder: (o: Order) => void;
+  logoURL: string;
+  t: any;
+}) {
   const sorted = orders.slice().sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
 
+  // The prototype splits the list into a live order and everything before it.
+  // Derived from the order's own status rather than a session snapshot, so it
+  // stays right after a refresh or on another device.
+  const isLive = (o: Order) => {
+    const st = normalizeStatus(o.status);
+    return st === 'sentToStore' || st === 'inDelivery';
+  };
+  const live = sorted.filter(isLive);
+  const past = sorted.filter((o) => !isLive(o));
+
   return (
-    <div className='flex flex-col gap-2.5'>
-      {sorted.map((o) => {
-        const summary = (o.items || []).map((it) => it.name).filter(Boolean).join(', ');
-        return (
-          <div key={o.id} className='rounded-[14px] bg-surface-3 p-3.5'>
-            <div className='flex items-center gap-3'>
-              <span className='flex h-[38px] w-[38px] shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-white'>
-                {logoURL ? <img src={logoURL} alt='' className='h-full w-full object-contain' /> : <Receipt className='h-5 w-5 text-black' />}
-              </span>
-              <div className='min-w-0 flex-1'>
-                <div className='truncate text-[14px] font-bold'>{o.storeDetails?.name || (t?.order ?? 'Order')}</div>
-                <div className='mt-0.5 text-[11.5px] font-medium text-muted-foreground'>
-                  {formatDateTime(o.orderDate)} · {apiFormatPrice(o.totalOrderPrice)}
+    <div className='flex flex-col'>
+      {live.length > 0 && (
+        <>
+          <div className='text-[11px] font-bold uppercase tracking-[0.04em] text-white'>{t?.active ?? 'Active'}</div>
+          <div className='mb-6 mt-2.5 flex flex-col gap-2.5'>
+            {live.map((o) => {
+              /*
+               * A live card used to show the store name and a status, and the
+               * store name comes back empty — so every in-flight order read
+               * just "Order" with no way to tell one from another. Lead with
+               * the reference the customer is actually given, then when it was
+               * placed, what it cost and what is in it.
+               */
+              const ref = o.collectionCode || (o.orderNumber ? `#${o.orderNumber}` : '');
+              const summary = (o.items || [])
+                .map((it) => `${it.quantity}× ${it.name}`)
+                .filter(Boolean)
+                .join(', ');
+              return (
+                <button
+                  key={o.id}
+                  onClick={() => onView(o)}
+                  className='flex w-full items-start gap-3 rounded-[14px] border border-success/35 bg-surface-3 p-3.5 text-left transition hover:bg-elevated'>
+                  <span className='flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] bg-card'>
+                    <span className='h-4 w-4 animate-spin rounded-full border-[2.5px] border-white/20 border-t-success' />
+                  </span>
+                  <span className='min-w-0 flex-1'>
+                    <span className='flex items-baseline gap-2'>
+                      <span className='min-w-0 truncate text-[14.5px] font-bold'>{ref || o.storeDetails?.name || (t?.order ?? 'Order')}</span>
+                      {o.orderType && (
+                        <span className='shrink-0 text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground'>{getOrderTypeMeta(o.orderType, t)}</span>
+                      )}
+                    </span>
+                    <span className='mt-0.5 block text-[12px] font-semibold text-success'>{getStatusMeta(o.status, t).label}</span>
+                    <span className='mt-1 block text-[11.5px] font-medium text-muted-foreground'>
+                      {formatDateTime(o.orderDate)} · {apiFormatPrice(o.totalOrderPrice)}
+                    </span>
+                    {summary && <span className='mt-1 line-clamp-2 block text-[12px] font-medium text-fg-tertiary'>{summary}</span>}
+                  </span>
+                  <ChevronRight className='mt-0.5 size-4.25 shrink-0 text-muted-foreground' strokeWidth={2.2} />
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {past.length > 0 && live.length > 0 && (
+        <div className='mt-6.5 text-[11px] font-bold uppercase tracking-[0.04em] text-white'>{t?.pastOrders ?? 'Past orders'}</div>
+      )}
+
+      <div className={cn('flex flex-col gap-3', past.length > 0 && live.length > 0 && 'mt-2.75')}>
+        {past.map((o) => {
+          const summary = (o.items || [])
+            .map((it) => it.name)
+            .filter(Boolean)
+            .join(', ');
+          return (
+            /*
+            Card per the design: logo, name over "<date> · Nr. <order no>", and
+            the total with its item count right-aligned. The total used to sit in
+            the meta line, which left the order number nowhere to go — and that
+            number is what a customer reads out on the phone.
+          */
+            <div key={o.id} className='rounded-2xl bg-card p-[15px]'>
+              <div className='flex items-center gap-3'>
+                <span className='flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[11px] bg-white'>
+                  {logoURL ? <img src={logoURL} alt='' className='h-full w-full object-contain' /> : <Receipt className='h-5 w-5 text-black' />}
+                </span>
+                <div className='min-w-0 flex-1'>
+                  <div className='truncate text-[14.5px] font-bold'>{o.storeDetails?.name || (t?.order ?? 'Order')}</div>
+                  <div className='mt-px truncate text-[12px] font-medium text-muted-foreground'>
+                    {formatDateTime(o.orderDate)}
+                    {(o.collectionCode || o.orderNumber) && ` · ${t?.orderNumber ?? 'No.'} ${o.collectionCode || o.orderNumber}`}
+                  </div>
+                </div>
+                <div className='shrink-0 text-right'>
+                  <div className='text-[14.5px] font-extrabold'>{apiFormatPrice(o.totalOrderPrice)}</div>
+                  <div className='mt-px text-[11.5px] font-semibold text-muted-foreground'>
+                    {(o.items || []).length} {t?.items ?? 'items'}
+                  </div>
                 </div>
               </div>
+              {summary && <div className='mt-2.5 line-clamp-2 text-[12.5px] font-medium leading-[1.4] text-fg-tertiary'>{summary}</div>}
+              <div className='mt-[13px] flex gap-2.5'>
+                {/*
+                Text only, and the reorder button is white on black — both
+                straight from the design, which draws no icons here and does not
+                tint this button with the store accent.
+              */}
+                <button
+                  onClick={() => onView(o)}
+                  className='flex h-[42px] flex-1 items-center justify-center rounded-xl border-[1.5px] border-elevated bg-transparent text-[13.5px] font-extrabold text-white transition hover:bg-surface-hover active:scale-[0.98]'>
+                  {t?.viewOrder ?? 'View'}
+                </button>
+                <button
+                  onClick={() => onReorder(o)}
+                  className='flex h-[42px] flex-[1.5] items-center justify-center whitespace-nowrap rounded-xl bg-white text-[13px] font-extrabold text-black transition active:scale-[0.98]'>
+                  {t?.reorder ?? 'Reorder'}
+                </button>
+              </div>
             </div>
-            {summary && <div className='mt-2.5 line-clamp-2 text-[12px] font-medium text-[#a9adb3]'>{summary}</div>}
-            <div className='mt-3 flex gap-2'>
-              <button
-                onClick={() => onView(o)}
-                className='flex h-10 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-border-strong bg-transparent text-[12.5px] font-extrabold text-white transition hover:bg-surface-1'>
-                <Eye className='h-3.5 w-3.5' /> {t?.viewOrder ?? 'View'}
-              </button>
-              <button
-                onClick={() => onReorder(o)}
-                className='flex h-10 flex-[1.4] items-center justify-center gap-1.5 whitespace-nowrap rounded-[11px] bg-primary text-[12.5px] font-extrabold text-selected-text transition active:scale-[0.97]'>
-                <RotateCcw className='h-3.5 w-3.5' strokeWidth={2.4} /> {t?.reorder ?? 'Reorder'}
-              </button>
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }

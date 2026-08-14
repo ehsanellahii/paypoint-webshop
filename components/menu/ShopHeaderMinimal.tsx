@@ -14,7 +14,7 @@ export default function ShopHeaderMinimal({ onOpenAccount }: { onOpenAccount: ()
 
   return (
     <header className='sticky top-0 z-40 border-b border-border bg-[rgba(20,20,22,0.92)] backdrop-blur-[14px]'>
-      <div className='mx-auto flex h-[74px] max-w-[1320px] items-center gap-4 px-4 md:px-8'>
+      <div className='shell shell-pad flex h-[74px] items-center gap-4'>
         <BrandMark onClick={toMenu} />
         <div className='flex-1' />
         <button

@@ -1,34 +1,48 @@
 'use client';
 
-import Image from 'next/image';
+/* eslint-disable @next/next/no-img-element */
 import { useStore } from '~/contexts/store-context';
+import { cn } from '~/lib/utils';
 
 /**
- * Brand mark used in the header / hero.
- * If the store has a logo we show it; otherwise we render the brand name in the
- * prototype's script font with a small tagline underneath.
+ * The store's logo, used as the brand mark everywhere.
+ *
+ * The design replaced the typographic wordmark with the logo image at three
+ * sizes — 48px in the header, 76px in the auth hero, 150px in the menu hero.
+ * A plain <img> rather than next/image: the height is fixed and the width is
+ * intrinsic, so there is nothing to optimise by layout and every tenant serves
+ * a different host.
+ *
+ * Stores without a logo fall back to the brand name in the script face, so the
+ * header is never empty.
  */
-export default function BrandMark({ size = 'sm', onClick }: { size?: 'sm' | 'lg'; onClick?: () => void }) {
+const HEIGHTS = {
+  header: 'h-12 rounded-[10px]', // 48px
+  auth: 'h-[76px] rounded-[14px]',
+  hero: 'h-[150px] rounded-[20px]',
+} as const;
+
+const FALLBACK_TEXT = {
+  header: 'text-[25px]',
+  auth: 'text-[34px]',
+  hero: 'text-[42px] sm:text-[62px]',
+} as const;
+
+export default function BrandMark({ size = 'header', onClick }: { size?: keyof typeof HEIGHTS; onClick?: () => void }) {
   const storeInfo = useStore();
   const logo = storeInfo?.settings?.logo || storeInfo?.logo || '';
   const brand = storeInfo?.brandName || 'Restaurant';
 
-  const scriptSize = size === 'lg' ? 'text-[34px]' : 'text-[25px]';
-  const tagSize = size === 'lg' ? 'text-[10px]' : 'text-[8.5px]';
+  const content = logo ? (
+    <img src={logo} alt={brand} className={cn('block w-auto', HEIGHTS[size])} />
+  ) : (
+    <span className={cn('font-script leading-none text-white', FALLBACK_TEXT[size])}>{brand}</span>
+  );
 
+  if (!onClick) return content;
   return (
-    <div onClick={onClick} className={onClick ? 'flex items-center gap-3 cursor-pointer' : 'flex items-center gap-3'}>
-      {logo ? (
-        <div className='relative h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-white'>
-          <Image src={logo} alt={brand} fill className='object-contain' sizes='40px' />
-        </div>
-      ) : null}
-      <div className='flex flex-col leading-[0.9]'>
-        <span className={`font-script ${scriptSize} leading-none text-white`}>{brand}</span>
-        <span className={`font-display font-extrabold ${tagSize} mt-0.5 tracking-[0.18em]`}>
-          <span className='text-brand-green'>ONLINE</span> <span className='text-[#cfd2d6]'>·</span> <span className='text-brand-red'>ORDER</span>
-        </span>
-      </div>
-    </div>
+    <button type='button' onClick={onClick} aria-label={brand} className='flex shrink-0 items-center'>
+      {content}
+    </button>
   );
 }

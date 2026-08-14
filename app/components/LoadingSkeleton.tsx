@@ -7,7 +7,7 @@ const LoadingSkeleton = () => {
     <div className='min-h-screen bg-background'>
       {/* Header */}
       <div className='sticky top-0 z-40 border-b border-border bg-[rgba(20,20,22,0.92)] backdrop-blur-[14px]'>
-        <div className='mx-auto flex h-[74px] max-w-[1320px] items-center gap-4 px-4 md:px-8'>
+        <div className='shell shell-pad flex h-[74px] items-center gap-4'>
           <Block className='h-9 w-32' />
           <Block className='hidden h-11 flex-1 md:block' />
           <div className='flex flex-1 md:hidden' />
@@ -16,12 +16,12 @@ const LoadingSkeleton = () => {
       </div>
 
       {/* Hero */}
-      <div className='mx-auto max-w-[1320px] px-4 pt-7 md:px-8'>
+      <div className='shell shell-pad pt-7'>
         <Block className='h-[196px] w-full rounded-3xl sm:h-[260px]' />
       </div>
 
       {/* Meta bar */}
-      <div className='mx-auto max-w-[1320px] border-b border-border-strong px-4 py-[18px] md:px-8'>
+      <div className='shell shell-pad border-b border-border-strong py-[18px]'>
         <div className='flex flex-wrap items-center gap-3'>
           <Block className='h-12 w-56 rounded-3xl' />
           <Block className='h-5 w-40' />
@@ -30,7 +30,7 @@ const LoadingSkeleton = () => {
 
       {/* Category nav */}
       <div className='border-b border-border-strong'>
-        <div className='mx-auto flex h-[60px] max-w-[1320px] items-center gap-2 px-4 md:px-8'>
+        <div className='shell shell-pad flex h-[60px] items-center gap-2'>
           {[64, 90, 72, 84, 68, 96].map((w, i) => (
             <Block key={i} className='h-[42px] rounded-[21px]' style={{ width: w }} />
           ))}
@@ -38,14 +38,14 @@ const LoadingSkeleton = () => {
       </div>
 
       {/* Menu sections */}
-      <main className='mx-auto max-w-[1320px] px-4 pt-6 md:px-8'>
+      <main className='shell shell-pad pt-6'>
         {[1, 2].map((section) => (
           <section key={section} className='mb-12'>
             <div className='mb-5 flex items-center gap-3'>
               <div className='h-[26px] w-[5px] rounded-[3px] bg-surface-3' />
               <Block className='h-7 w-48' />
             </div>
-            <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
+            <div className='grid grid-cols-1 gap-4 min-[761px]:grid-cols-2 min-[1700px]:grid-cols-3'>
               {[1, 2, 3, 4].map((i) => (
                 <div key={i} className='flex gap-4 rounded-[18px] border border-border bg-surface-1 p-4'>
                   <div className='flex flex-1 flex-col gap-2'>

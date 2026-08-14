@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Decoded design reference (regenerate with scripts/decode-design.mjs)
+.design-decoded/

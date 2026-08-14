@@ -2,6 +2,10 @@ import { cache } from 'react';
 import { getImageURL, IMenuData, MenuCategory, MenuProduct } from './utils';
 
 export const API_BASE_URL = process.env.NODE_ENV === 'production' ? 'https://api.paypointpos.de/integration' : 'http://localhost:4000/integration';
+/** Payments and Connect live outside the /integration mount. */
+export const PAYMENTS_BASE_URL = API_BASE_URL.replace(/\/integration$/, '/payments');
+export const PAYMENT_API_KEY = process.env.NEXT_PUBLIC_PAYMENT_API_KEY ?? '';
+
 export const X_API_KEY = 'b3db8d621de8b0b9ab5351d05779f400:92b2cbc1e4bdcb0ab019ea16ae31d3fea304508e734672a5cf6661cded997f0c';
 // export const API_BASE_URL = 'http://localhost:4000/integration';
 const API_HEADERS: {
@@ -49,6 +53,9 @@ export const getStoreData = cache(async (slug: string, token?: string) => {
     phone: data?.data?.phone,
     email: data?.data?.emailAddress,
     logo: data?.data?.logoFileName ? `${getImageURL(data?.data?.logoFileName)}` : null,
+    // Not in the payload yet — read both plausible names so the screens light
+    // up as soon as one of them ships. See docs/backend-pending.md.
+    coverImage: data?.data?.coverFileName || data?.data?.webShopSettings?.coverImage ? `${getImageURL(data?.data?.coverFileName || data?.data?.webShopSettings?.coverImage)}` : null,
     timings: data?.data?.timings || null,
     slug: slug,
     settings: data?.data?.webShopSettings
@@ -186,11 +193,12 @@ export const fetchMenuData = async (adminId?: string, storeId?: string) => {
   }
 };
 
-export const loginUser = async (adminId: string, storeId: string, phoneNumberWithCode: string) => {
+export const loginUser = async (adminId: string, storeId: string, phoneNumberWithCode: string, name?: string) => {
   const API_URL = `${API_BASE_URL}/user/login`;
   API_HEADERS['x-paypoint-tenant-id'] = adminId;
   API_HEADERS['x-paypoint-store-id'] = storeId;
-  const requestBody = { phoneNumber: phoneNumberWithCode, signInSource: 'web', signInWith: 'phone' };
+  // `name` is optional server-side; sending it updates the stored customer name.
+  const requestBody = { phoneNumber: phoneNumberWithCode, signInSource: 'web', signInWith: 'phone', ...(name ? { name } : {}) };
   try {
     const response = await fetch(API_URL, {
       method: 'POST',
@@ -393,3 +401,48 @@ export const formatPrice = (value: number | string | null | undefined) => {
 
 //   return true;
 // }
+
+
+/* ------------------------------------------------------------------ payments */
+
+/**
+ * Online payment runs on a *reserved* order, not a placed one.
+ *
+ * `/order/unconfirmed` holds the basket server-side and returns an id; the
+ * PaymentIntent is created against that id, and the order only becomes real
+ * when Stripe's webhook says the money arrived. The browser is never what
+ * confirms an order — a customer who closes the tab mid-payment must not end up
+ * with a paid order nobody is cooking, nor a cooked order nobody paid for.
+ */
+export const createUnconfirmedOrder = async (adminId: string, storeId: string, orderData: any) => {
+  const res = await fetch(`${API_BASE_URL}/order/unconfirmed`, {
+    method: 'POST',
+    headers: { ...API_HEADERS, 'x-paypoint-tenant-id': adminId, 'x-paypoint-store-id': storeId },
+    body: JSON.stringify(orderData),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.message || 'Could not reserve the order');
+  return json?.data ?? json;
+};
+
+/**
+ * A PaymentIntent for a reserved order.
+ *
+ * Only the order id goes over the wire — the server reads the amount off the
+ * order, so nothing here can change what is charged. Returns the connected
+ * account too: charges are created on the restaurant's own Stripe account, and
+ * Stripe.js has to be initialised against it.
+ */
+export const createPaymentIntent = async (orderId: string, userId?: string, method?: string) => {
+  const res = await fetch(`${PAYMENTS_BASE_URL}/create-payment-intent`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-payment-api-key': PAYMENT_API_KEY,
+    },
+    body: JSON.stringify({ order_id: orderId, user_id: userId, payment_method_type: method }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.message || 'Could not start the payment');
+  return json?.data as { client_secret: string; stripe_account_id: string; amount: number };
+};

@@ -28,7 +28,7 @@ export default function BottomBar({ onOpenCart }: { onOpenCart: () => void }) {
         data-cart-target='1'
         className='flex h-14 w-full items-center gap-3 rounded-2xl bg-primary px-2.5 text-selected-text shadow-[0_12px_30px_-8px_rgba(0,0,0,0.6)] transition active:scale-[0.98] disabled:opacity-60'>
         <span className='flex h-8 min-w-[30px] items-center justify-center rounded-[10px] bg-black px-2.5 text-sm font-extrabold text-white'>{totalItems}</span>
-        <span className='flex-1 text-left text-[15.5px] font-extrabold'>{isClosed ? (t.closed ?? 'Closed') : (t.order ?? 'View order')}</span>
+        <span className='flex-1 text-left text-[15.5px] font-extrabold'>{isClosed ? (t.closed ?? 'Closed') : (t.viewOrder ?? 'View order')}</span>
         <span className='pr-2 text-[15.5px] font-extrabold'>{formatPrice(totalPrice)}</span>
       </button>
     </div>

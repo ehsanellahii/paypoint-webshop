@@ -26,6 +26,9 @@ export const registrationSchema = z
 
 export const loginSchema = z
   .object({
+    // The prototype's sign-in panel asks for a name alongside the number.
+    customerName: z.string().trim().min(2, 'Name must be at least 2 characters').max(80, 'Name is too long'),
+
     phoneCode: z.string().regex(/^\+\d{1,4}$/, 'Invalid country code'),
 
     phoneNumber: z

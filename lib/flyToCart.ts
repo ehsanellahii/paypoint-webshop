@@ -1,5 +1,5 @@
 /**
- * Fly-to-cart animation (ported from the Little Italy prototype `flyAdd`).
+ * Fly-to-cart animation (ported from the design prototype `flyAdd`).
  * Animates a thumbnail of the product from the tapped add-button along a
  * parabolic arc into the cart button, then bounces the cart + emits a ring
  * burst and a floating "+1". Pure DOM / Web Animations API — call on click.

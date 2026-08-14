@@ -41,11 +41,11 @@ export default function MenuMetaBar({ onRequireAddress, onOpenInfo, onOpenPreord
   const seg = (active: boolean) =>
     cn(
       'inline-flex items-center gap-2 rounded-[19px] px-4 text-[13.5px] font-bold transition',
-      active ? 'bg-primary text-selected-text' : 'text-muted-foreground hover:bg-white/[0.06] hover:text-white'
+      active ? 'bg-primary text-selected-text' : 'text-fg-secondary hover:bg-white/[0.06] hover:text-white'
     );
 
   return (
-    <div className='mx-auto max-w-[1320px] border-b border-border-strong px-4 py-[18px] md:px-8'>
+    <div className='shell shell-pad border-b border-border-strong py-[18px]'>
       <div className='flex flex-wrap items-center gap-3.5'>
         {/* Order type toggle */}
         {(isPickupAvailable || isDeliveryAvailable) && (
@@ -53,13 +53,14 @@ export default function MenuMetaBar({ onRequireAddress, onOpenInfo, onOpenPreord
             {isDeliveryAvailable && (
               <button onClick={chooseDelivery} className={seg(isDelivery)} style={{ height: 38 }}>
                 <Bike className='h-4 w-4' />
-                {t.delivery ?? 'Delivery'}
+                {t.delivery}
+                {rate.deliveryTime ? ` ${rate.deliveryTime} Min.` : ''}
               </button>
             )}
             {isPickupAvailable && (
               <button onClick={() => setOrderType('pickup')} className={seg(!isDelivery)} style={{ height: 38 }}>
                 <ShoppingBag className='h-[15px] w-[15px]' />
-                {t.pickup ?? 'Pickup'}
+                {t.pickup}
               </button>
             )}
           </div>
@@ -94,7 +95,7 @@ export default function MenuMetaBar({ onRequireAddress, onOpenInfo, onOpenPreord
           {onOpenInfo && (
             <>
               <span className='opacity-40'>·</span>
-              <button onClick={onOpenInfo} className='font-bold text-[#7fb2ff]'>
+              <button onClick={onOpenInfo} className='font-bold text-link'>
                 {t.restaurantDetails ?? 'Restaurant details'}
               </button>
             </>

@@ -6,6 +6,8 @@ import { buildStoreMetadata } from '~/lib/metadata';
 import ThemeVars from '~/lib/ThemeVars';
 import StoreProvider from '~/contexts/store-context';
 import ConfirmationScreen from '~/app/components/ConfirmationScreen';
+import MobileConfirmationScreen from '~/app/components/mobile/MobileConfirmationScreen';
+import { getDevice } from '~/lib/device';
 import { BLOCKEDSLUGS } from '../page';
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -34,10 +36,13 @@ const ConfirmationPage = async ({
   // No store behind the slug — a 404 page, not an empty shell.
   if (!storeInfo) notFound();
 
+  const device = await getDevice();
+
+
   return (
     <StoreProvider value={storeInfo}>
       <ThemeVars primary={storeInfo?.settings?.themeColors?.primaryColor} selectedText={storeInfo?.settings?.themeColors?.selectedTextColor} />
-      <ConfirmationScreen />
+      {device === 'mobile' ? <MobileConfirmationScreen /> : <ConfirmationScreen />}
     </StoreProvider>
   );
 };

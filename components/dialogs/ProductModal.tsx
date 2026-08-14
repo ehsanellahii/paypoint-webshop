@@ -140,7 +140,7 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
       <Dialog.Portal>
         <Dialog.Backdrop className='fixed inset-0 z-60 bg-black/74 data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0' />
         <Dialog.Viewport className='fixed inset-0 z-60 flex items-center justify-center p-4'>
-          <Dialog.Popup className='anim-scalein flex max-h-[88vh] w-[560px] max-w-full flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-[0_40px_90px_-20px_rgba(0,0,0,0.8)]'>
+          <Dialog.Popup className='anim-scalein relative flex max-h-[88vh] w-[560px] max-w-full flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-[0_40px_90px_-20px_rgba(0,0,0,0.8)]'>
             <Dialog.Title className='sr-only'>{product.name}</Dialog.Title>
 
             {/* Close */}
@@ -153,7 +153,7 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
             {/* Scrollable content */}
             <div ref={scrollRef} className='min-h-0 grow overflow-y-auto scrollbar-hide'>
               {hasPhoto ? (
-                <div className='relative h-[340px] w-full bg-white'>
+                <div className='pmimg relative w-full bg-white'>
                   <SmartImage fallbackSrc={logoURL} src={getImageURL(product.images[0])} alt={product.name} fill className='object-contain' sizes='560px' />
                 </div>
               ) : (
@@ -163,7 +163,7 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
               <div className='p-6'>
                 <h2 className='m-0 font-display text-[28px] font-extrabold leading-[1.05] tracking-tight'>{product.name}</h2>
                 <div className='mt-2.5 flex items-center gap-3'>
-                  <span className='text-[15px] font-semibold text-[#c4c6ca]'>{formatPrice(product.currentPrice)}</span>
+                  <span className='text-[15px] font-semibold text-fg-soft'>{formatPrice(product.currentPrice)}</span>
                 </div>
 
                 {product.description && (
@@ -171,7 +171,7 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                     <span className='flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-white/10'>
                       <Info className='h-[18px] w-[18px]' />
                     </span>
-                    <span className='text-[13.5px] font-semibold text-[#d6d8dc]'>{product.description}</span>
+                    <span className='text-[13.5px] font-semibold text-fg-on-photo'>{product.description}</span>
                   </div>
                 )}
 
@@ -231,9 +231,9 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                                   onClick={() => setOptionQty(section, item._id, isSelected ? 0 : 1)}
                                   className={cn(
                                     'flex items-center gap-3 rounded-[14px] border-2 px-[15px] py-3.5 text-left transition',
-                                    isSelected ? 'border-white bg-surface-3' : 'border-transparent bg-surface-3'
+                                    isSelected ? 'border-white bg-surface-selected' : 'border-transparent bg-surface-3'
                                   )}>
-                                  <span className={cn('flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2', isSelected ? 'border-white bg-white' : 'border-[#55575c]')}>
+                                  <span className={cn('flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2', isSelected ? 'border-white bg-white' : 'border-fg-faint')}>
                                     {isSelected && <Check className='h-[13px] w-[13px] text-black' strokeWidth={2.8} />}
                                   </span>
                                   <span className='min-w-0 flex-1'>
@@ -261,7 +261,7 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                                   </button>
                                 ) : (
                                   <div className='flex items-center gap-1 rounded-[11px] bg-card p-1'>
-                                    <button type='button' onClick={() => setOptionQty(section, item._id, qty - 1)} aria-label='less' className='flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-[#3a3a3e] text-white transition active:scale-[0.85]'>
+                                    <button type='button' onClick={() => setOptionQty(section, item._id, qty - 1)} aria-label='less' className='flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-control text-white transition active:scale-[0.85]'>
                                       <Minus className='h-4 w-4' strokeWidth={2.6} />
                                     </button>
                                     <span className='min-w-5 text-center text-[14.5px] font-extrabold'>{qty}</span>

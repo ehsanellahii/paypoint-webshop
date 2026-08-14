@@ -1,3 +1,6 @@
+import { API_BASE_URL, X_API_KEY } from '~/lib/api';
+import { getImageURL } from '~/lib/utils';
+
 /**
  * Snapshot of the just-placed order.
  *
@@ -26,6 +29,48 @@ export type PlacedOrder = {
   status?: string;
   placedAt: number;
 };
+
+
+/**
+ * Load an order from the API by the reference in the URL — the collection code
+ * the customer is given, or the order's own id. The confirmation screen used to
+ * read this back out of sessionStorage, which meant it only worked in the
+ * session that placed the order: opening one from the order list, or reloading
+ * on another device, showed nothing.
+ */
+export async function fetchPlacedOrder(orderRef: string): Promise<PlacedOrder | null> {
+  if (!orderRef) return null;
+  const res = await fetch(`${API_BASE_URL}/order/${encodeURIComponent(orderRef)}`, {
+    headers: { 'Content-Type': 'application/json', 'x-api-key': X_API_KEY },
+    cache: 'no-store',
+  });
+  if (!res.ok) return null;
+  const json = await res.json();
+  const o = json?.data;
+  if (!o) return null;
+
+  const isDelivery = o.orderType === 'delivery';
+  const eta = Number(o.deliveryTime) || (isDelivery ? 30 : 15);
+  const store = [o.storeDetails?.name, o.storeDetails?.address].filter(Boolean).join(' · ');
+
+  return {
+    orderRef: o.collectionCode || String(o.orderNumber ?? ''),
+    isDelivery,
+    paymentName: o.paymentMethod ?? '',
+    total: Number(o.totalOrderPrice) || 0,
+    etaLo: eta,
+    etaHi: eta + 10,
+    addressLine: isDelivery ? (o.addressDetails?.address ?? '') : store,
+    items: (o.items ?? []).map((it: any) => ({
+      name: it.name,
+      qty: it.quantity,
+      lineTotal: it.totalPrice,
+      image: it.image ? getImageURL(it.image) : '',
+    })),
+    status: o.status,
+    placedAt: o.orderDateTime ? new Date(o.orderDateTime).getTime() : Date.now(),
+  };
+}
 
 const key = (slug: string) => `pos-last-order:${slug || 'default'}`;
 

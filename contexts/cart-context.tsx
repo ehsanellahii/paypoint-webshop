@@ -34,6 +34,9 @@ interface CartContextType {
   appliedVoucher: AppliedVoucher | null;
   applyVoucher: (payload: VoucherApplyResponse) => void;
   removeVoucher: () => void;
+  /** Free-text note for the whole order — written in the cart, sent from checkout. */
+  orderMessage: string;
+  setOrderMessage: (v: string) => void;
 }
 
 export type AppliedVoucher = {
@@ -61,6 +64,13 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
  * store A's product ids — which the server rejects with "Invalid product".
  */
 const getCartStorageKey = (storeKey: string) => `pos-cart:${storeKey || 'default'}`;
+
+/*
+ * The order message lives in its own key rather than inside the cart payload,
+ * which is a bare CartItem[] — wrapping it in an object would invalidate every
+ * stored cart for the sake of one string.
+ */
+const getMessageStorageKey = (storeKey: string) => `pos-order-message:${storeKey || 'default'}`;
 
 const getStoredCart = (storageKey: string): CartItem[] => {
   if (typeof window === 'undefined') return [];
@@ -109,18 +119,40 @@ const stableStringifyCustomizations = (c: CartItemCustomization) => {
 
 export function CartProvider({ children, storeKey = 'default' }: { children: ReactNode; storeKey?: string }) {
   const storageKey = getCartStorageKey(storeKey);
+  const messageKey = getMessageStorageKey(storeKey);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [orderMessage, setOrderMessageState] = useState('');
   const [isHydrated, setIsHydrated] = useState(false);
   const [appliedVoucher, setAppliedVoucher] = useState<AppliedVoucher | null>(null);
   const [discountAmount, setDiscountAmount] = useState(0);
 
   useEffect(() => {
     const storedCart = getStoredCart(storageKey);
+    let storedMessage = '';
+    try {
+      storedMessage = localStorage.getItem(messageKey) ?? '';
+    } catch {
+      /* storage unavailable — the message is not worth failing over */
+    }
     startTransition(() => {
       setCart(storedCart);
+      setOrderMessageState(storedMessage);
       setIsHydrated(true);
     });
-  }, [storageKey]);
+  }, [storageKey, messageKey]);
+
+  const setOrderMessage = useCallback(
+    (v: string) => {
+      setOrderMessageState(v);
+      try {
+        if (v) localStorage.setItem(messageKey, v);
+        else localStorage.removeItem(messageKey);
+      } catch {
+        /* storage unavailable */
+      }
+    },
+    [messageKey]
+  );
 
   useEffect(() => {
     if (isHydrated) saveCart(storageKey, cart);
@@ -177,7 +209,13 @@ export function CartProvider({ children, storeKey = 'default' }: { children: Rea
     setCart([]);
     setAppliedVoucher(null);
     setDiscountAmount(0);
-  }, []);
+    setOrderMessageState('');
+    try {
+      localStorage.removeItem(messageKey);
+    } catch {
+      /* storage unavailable */
+    }
+  }, [messageKey]);
 
   /**
    * Drop cart lines whose product is no longer offered by this store (removed,
@@ -249,6 +287,8 @@ export function CartProvider({ children, storeKey = 'default' }: { children: Rea
         discountAmount,
         applyVoucher,
         removeVoucher,
+        orderMessage,
+        setOrderMessage,
       }}>
       {children}
     </CartContext.Provider>

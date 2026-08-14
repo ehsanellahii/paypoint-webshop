@@ -6,6 +6,8 @@ import { buildStoreMetadata } from '~/lib/metadata';
 import ThemeVars from '~/lib/ThemeVars';
 import StoreProvider from '~/contexts/store-context';
 import CheckoutScreen from '~/app/components/CheckoutScreen';
+import MobileCheckoutScreen from '~/app/components/mobile/MobileCheckoutScreen';
+import { getDevice } from '~/lib/device';
 import { BLOCKEDSLUGS } from '../page';
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -33,11 +35,12 @@ const CheckoutPage = async ({
   const storeInfo = await getStoreData(slug, token as string);
   // No store behind the slug — a 404 page, not an empty shell.
   if (!storeInfo) notFound();
+  const device = await getDevice();
 
   return (
     <StoreProvider value={storeInfo}>
       <ThemeVars primary={storeInfo?.settings?.themeColors?.primaryColor} selectedText={storeInfo?.settings?.themeColors?.selectedTextColor} />
-      <CheckoutScreen />
+      {device === 'mobile' ? <MobileCheckoutScreen /> : <CheckoutScreen />}
     </StoreProvider>
   );
 };

@@ -1,5 +1,7 @@
 import React from 'react';
 import HomeScreen from '../components/HomeScreen';
+import MobileMenuScreen from '../components/mobile/MobileMenuScreen';
+import { getDevice } from '~/lib/device';
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getStoreData } from '~/lib/api';
@@ -37,10 +39,16 @@ const page = async ({ params, searchParams }: { params: Promise<{ slug: string }
   if (!storeInfo) notFound();
   const primaryColor = storeInfo?.settings?.themeColors?.primaryColor;
   const selectedColor = storeInfo?.settings?.themeColors?.selectedTextColor;
+  /*
+   * Mobile and desktop are separate designs, so the branch is here rather than
+   * a media query: only the chosen tree is rendered and sent. Everything above
+   * this line — the store fetch, the theme, the provider — is shared.
+   */
+  const device = await getDevice();
   return (
     <StoreProvider value={storeInfo}>
       <ThemeVars primary={primaryColor} selectedText={selectedColor} />
-      <HomeScreen />
+      {device === 'mobile' ? <MobileMenuScreen /> : <HomeScreen />}
     </StoreProvider>
   );
 };

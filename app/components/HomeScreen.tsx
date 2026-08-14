@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
@@ -16,12 +15,14 @@ import OrdersDialog from '~/components/Header/OrdersDialog';
 import UserDrawer from '~/components/Header/UserDrawer';
 import DeliveryAddressModal from '~/components/dialogs/DeliveryAddressModal';
 import CartToast from '~/components/menu/CartToast';
+import VoucherFlash from '~/components/checkout/VoucherFlash';
 import PreorderModal, { type PreorderSlot } from '~/components/menu/PreorderModal';
 import RestaurantInfoModal from '~/components/menu/RestaurantInfoModal';
 import ZoneCheckGate from '~/components/onboarding/ZoneCheckGate';
+import { useZoneGate } from '~/hooks/useZoneGate';
 import { savePreorderSlot } from '~/lib/preorderSlot';
 import { fetchMenuData, getCategories, getAllProducts } from '@/lib/api';
-import { IMenuData, MenuProduct, storage } from '~/lib/utils';
+import { IMenuData, MenuProduct } from '~/lib/utils';
 import LoadingSkeleton from './LoadingSkeleton';
 import { useStore } from '~/contexts/store-context';
 import { useCart } from '~/contexts/cart-context';
@@ -52,24 +53,7 @@ export default function HomeScreen() {
   const [infoOpen, setInfoOpen] = useState(false);
   const [preorderOpen, setPreorderOpen] = useState(false);
   const [scheduledSlot, setScheduledSlot] = useState<PreorderSlot | null>(null);
-  const [showGate, setShowGate] = useState(false);
-
-  // Delivery zone-check onboarding gate — show once per store when delivery is
-  // offered, no address is chosen yet, and the user hasn't seen it before.
-  useEffect(() => {
-    if (!storeInfo) return;
-    const slug = storeInfo.slug || 'default';
-    const deliveryAvailable = storeInfo.settings?.orderTypes?.delivery;
-    const isDineIn = !!storeInfo.tableInfo?.token;
-    const seen = storage.get<boolean>(`pos-intro-seen:${slug}`, false);
-    if (deliveryAvailable && !isDineIn && !deliveryAddress && !seen) setShowGate(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storeInfo]);
-
-  const dismissGate = (dismissForever?: boolean) => {
-    if (dismissForever) storage.set(`pos-intro-seen:${storeInfo?.slug || 'default'}`, true);
-    setShowGate(false);
-  };
+  const { showGate, dismissGate } = useZoneGate();
 
   useEffect(() => {
     async function loadMenu() {
@@ -147,11 +131,17 @@ export default function HomeScreen() {
 
   if (loading) return <LoadingSkeleton />;
 
-  if (error || !menuData) {
+  /*
+   * A menu that fails outright still has a shop around it — header, hours,
+   * address, the account drawer — so the failure is a banner over whatever did
+   * load rather than a page that replaces all of it. Only a total failure with
+   * nothing to show falls back to the full-page state.
+   */
+  if (!menuData) {
     return (
       <div className='flex min-h-screen items-center justify-center bg-background'>
         <div className='text-center'>
-          <p className='mb-4 text-brand-red'>{error || 'Failed to load menu'}</p>
+          <p className='mb-4 text-brand-red'>{error || t.menuLoadFailed}</p>
           <button onClick={() => window.location.reload()} className='rounded-lg bg-primary px-6 py-2 font-medium text-selected-text'>
             {t.retry ?? 'Retry'}
           </button>
@@ -164,6 +154,12 @@ export default function HomeScreen() {
 
   return (
     <div className='min-h-screen bg-background text-foreground'>
+      <a
+        href='#menu-main'
+        className='absolute left-2 top-[-60px] z-[200] rounded-[10px] bg-primary px-4 py-2.5 text-sm font-bold text-selected-text focus:top-2'>
+        {t.skipToContent}
+      </a>
+
       <MenuHeader
         query={query}
         onQueryChange={setQuery}
@@ -183,10 +179,25 @@ export default function HomeScreen() {
       />
       <CategoryNavBar categories={productsByCategory} activeCategory={activeCategory} onCategoryClick={setActiveCategory} query={query} onQueryChange={setQuery} />
 
-      <main className='mx-auto max-w-[1320px] px-4 pb-28 pt-6 md:px-8 lg:pb-20' role='main'>
+      <main id='menu-main' className='shell shell-pad pb-28 pt-6 lg:pb-20' role='main'>
+        {error && (
+          <div className='anim-fade mb-6 flex items-center gap-3.5 rounded-2xl border border-warning/35 bg-warning/10 px-4.5 py-4'>
+            <AlertCircle className='h-[22px] w-[22px] shrink-0 text-warning' strokeWidth={1.8} />
+            <div className='min-w-0 flex-1'>
+              <div className='text-[14.5px] font-extrabold text-white'>{t.menuLoadFailed}</div>
+              <div className='mt-0.5 text-[13px] font-medium text-fg-secondary'>{t.menuLoadFailedSub}</div>
+            </div>
+            <button
+              onClick={() => window.location.reload()}
+              className='h-10 shrink-0 rounded-[11px] bg-primary px-4 text-[13.5px] font-extrabold text-selected-text'>
+              {t.reload}
+            </button>
+          </div>
+        )}
+
         {prunedCount > 0 && (
           <div className='anim-fade mb-5 flex items-center gap-3 rounded-2xl border border-[rgba(255,138,94,0.35)] bg-[rgba(255,138,94,0.1)] px-4 py-3.5'>
-            <AlertCircle className='h-5 w-5 shrink-0 text-[#ff8a5c]' />
+            <AlertCircle className='h-5 w-5 shrink-0 text-warning' />
             <div className='min-w-0 flex-1 text-[13.5px] font-semibold text-white'>
               {t.cartItemsRemoved ?? 'Some items are no longer available and were removed from your cart.'}
             </div>
@@ -198,7 +209,7 @@ export default function HomeScreen() {
         {noResults ? (
           <div className='flex flex-col items-center px-5 py-20 text-center'>
             <div className='flex h-[78px] w-[78px] items-center justify-center rounded-full bg-surface-1'>
-              <Search className='h-9 w-9 text-[#55575c]' />
+              <Search className='h-9 w-9 text-fg-faint' />
             </div>
             <div className='mt-5 text-lg font-extrabold'>{t.noResults ?? 'Nothing found'}</div>
             <div className='mt-2 max-w-[320px] text-sm font-medium text-muted-foreground'>
@@ -210,14 +221,17 @@ export default function HomeScreen() {
           </div>
         ) : (
           filteredCategories.map((category) => (
-            <section key={category.id} id={`category-${category.id}`} className='mb-12 scroll-mt-[150px]' aria-labelledby={`heading-${category.id}`}>
+            <section key={category.id} id={`category-${category.id}`} className='menu-anchor mb-12' aria-labelledby={`heading-${category.id}`}>
               <div className='mb-5 flex items-center gap-3'>
                 <span className='h-[26px] w-[5px] shrink-0 rounded-[3px] bg-primary' />
                 <h2 id={`heading-${category.id}`} className='m-0 text-2xl font-extrabold tracking-tight md:text-[27px]'>
                   {category.name}
                 </h2>
               </div>
-              <div className='grid grid-cols-1 gap-4 sm:grid-cols-2' role='list' aria-label={`${category.name} products`}>
+              <div
+                className='grid grid-cols-1 gap-4 min-[761px]:grid-cols-2 min-[1700px]:grid-cols-3'
+                role='list'
+                aria-label={`${category.name} products`}>
                 {category.products.map((product) => (
                   <ProductCard key={product.id} product={product} onClick={() => handleProductClick(product)} />
                 ))}
@@ -249,6 +263,8 @@ export default function HomeScreen() {
 
       {/* Mobile floating cart bar */}
       <BottomBar onOpenCart={openCartGuarded} />
+
+      <VoucherFlash />
 
       {/* Global add-to-cart toast + confetti */}
       <CartToast />

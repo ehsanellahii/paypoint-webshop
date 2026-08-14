@@ -6,6 +6,8 @@ import { LanguageProvider } from '@/contexts/language-context';
 import { AddressProvider } from '~/contexts/address-context';
 import { UserProvider } from '~/contexts/user-context';
 import DebugPersistError from '~/lib/DebugPersistError';
+import { getDevice } from '~/lib/device';
+import { DeviceProvider } from '~/contexts/device-context';
 
 const inter = Inter({
   variable: '--font-inter',
@@ -84,8 +86,12 @@ export const viewport: Viewport = {
 
 export default async function RootLayout({ children, params }: { children: React.ReactNode; params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+  // Decided in proxy.ts from the User-Agent (or ?view=). Stamped on <html>
+  // so the mobile palette in globals.css can scope to it, and passed through
+  // context so client components can pick their tree.
+  const device = await getDevice();
   return (
-    <html lang='en' className='dark'>
+    <html lang='en' className='dark' data-device={device}>
       {/*
        * No hand-written <head>: Next builds it from the Metadata API, so the
        * icons and colour scheme are declared as `metadata` and `viewport`
@@ -100,14 +106,16 @@ export default async function RootLayout({ children, params }: { children: React
          * every actual consumer wants the store's own `posGoogleApiKey`. It
          * also downloaded the SDK on the menu page, which never draws a map.
          */}
-        <LanguageProvider>
+        <DeviceProvider device={device}>
+          <LanguageProvider>
           <UserProvider>
             <AddressProvider storeKey={slug || 'default'}>
               <DebugPersistError />
               <CartProvider storeKey={slug || 'default'}>{children}</CartProvider>
             </AddressProvider>
           </UserProvider>
-        </LanguageProvider>
+          </LanguageProvider>
+        </DeviceProvider>
       </body>
     </html>
   );
