@@ -5,6 +5,7 @@ import OtpInput from 'react-otp-input';
 
 import BrandMark from '~/components/menu/BrandMark';
 import { useAuthFlow } from '~/hooks/useAuthFlow';
+import { APPLE_SIGNIN_ENABLED } from '~/lib/authMock';
 import { useStore } from '~/contexts/store-context';
 import { getStoreCover } from '~/lib/storeMedia';
 import { cn } from '~/lib/utils';
@@ -165,20 +166,21 @@ export default function MobileAuthScreen({ isOpen, handleOpenChange, isRegistrat
 
               {/*
                 Social sign-in, drawn to the design: an "oder" rule, then Apple
-                and Google side by side on white. No provider is wired up yet —
-                the handlers land with the Apple/Google work, so these are
-                disabled rather than pretending to do something.
+                and Google side by side on white. Both go through Firebase and
+                then log in against our own backend by email.
               */}
               <OrDivider label={t.or ?? 'or'} className='mt-[18px]' />
 
               <div className='mt-3.5 flex gap-2.5'>
-                <SocialButton disabled label='Apple'>
+                {APPLE_SIGNIN_ENABLED && (
+                <SocialButton disabled={a.disabled} onClick={a.signInWithApple} label='Apple'>
                   <svg width='17' height='17' viewBox='0 0 22 22' fill='#000' aria-hidden>
                     <path d='M15.3 11.6c0-2 1.6-2.9 1.7-3-1-1.4-2.4-1.6-2.9-1.6-1.2-.1-2.4.7-3 .7-.6 0-1.6-.7-2.6-.7-1.3 0-2.6.8-3.2 2-1.4 2.4-.4 6 1 7.9.7.9 1.4 2 2.5 1.9 1-.04 1.4-.6 2.6-.6s1.5.6 2.6.6 1.7-.9 2.4-1.8c.7-1 1-2 1-2.1-.1 0-1.9-.7-1.9-2.8zM13.4 5.5c.5-.7.9-1.6.8-2.5-.8 0-1.7.5-2.3 1.2-.5.6-.9 1.5-.8 2.4.9.1 1.7-.4 2.3-1.1z' />
                   </svg>
                 </SocialButton>
+                )}
 
-                <SocialButton disabled label='Google'>
+                <SocialButton disabled={a.disabled} onClick={a.signInWithGoogle} label='Google'>
                   <svg width='17' height='17' viewBox='0 0 18 18' aria-hidden>
                     <path fill='#4285F4' d='M17.6 9.2c0-.6-.05-1.2-.15-1.7H9v3.3h4.8c-.2 1.1-.8 2-1.8 2.6v2.2h2.9c1.7-1.6 2.7-3.9 2.7-6.4z' />
                     <path fill='#34A853' d='M9 18c2.4 0 4.5-.8 6-2.2l-2.9-2.2c-.8.5-1.8.9-3.1.9-2.4 0-4.4-1.6-5.1-3.8H.9v2.3C2.4 16 5.5 18 9 18z' />

@@ -8,17 +8,30 @@ import { z } from 'zod';
 
 
 // ✅ your firebase auth instance (already setup by you)
-import { auth } from '~/lib/firebase';
+import { appleProvider, auth, googleProvider } from '~/lib/firebase';
 
-import { RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult } from 'firebase/auth';
-import { loginUser, registerUser, syncFavorites } from '~/lib/api';
+import { RecaptchaVerifier, signInWithPhoneNumber, signInWithPopup, type ConfirmationResult } from 'firebase/auth';
+import { loginUser, loginUserWithProvider, registerUser, syncFavorites } from '~/lib/api';
 import { useStore } from '~/contexts/store-context';
 import { useUser } from '~/contexts/user-context';
 import { getFavoriteIds, setFavoritesFromIds } from '~/lib/favorites';
 import { MOCK_OTP_CODE, MOCK_OTP_ENABLED } from '~/lib/authMock';
 
-/** Turn a Firebase auth error into something a customer can act on. */
-function describeAuthError(e: { code?: string; message?: string }, t: Partial<Record<'invalidPhone' | 'otpSendFailed', string>>) {
+/**
+ * Turn a Firebase auth error into something a customer can act on.
+ *
+ * Several codes are shared across providers but need different wording:
+ * `auth/operation-not-allowed` means "this provider is switched off in the
+ * Firebase console", so naming the wrong one sends whoever is debugging it to
+ * the wrong settings page.
+ */
+function describeAuthError(
+  e: { code?: string; message?: string },
+  t: Partial<Record<'invalidPhone' | 'otpSendFailed', string>>,
+  provider: 'phone' | 'google' | 'apple' = 'phone',
+) {
+  const providerName = provider === 'phone' ? 'Phone' : provider === 'google' ? 'Google' : 'Apple';
+
   switch (e?.code) {
     case 'auth/invalid-phone-number':
       return t?.invalidPhone ?? 'That phone number does not look right.';
@@ -28,12 +41,22 @@ function describeAuthError(e: { code?: string; message?: string }, t: Partial<Re
     case 'auth/billing-not-enabled':
       return 'SMS sending is currently unavailable. Please try again later.';
     case 'auth/operation-not-allowed':
-      return 'Phone sign-in is not enabled for this site.';
+      return `${providerName} sign-in is not enabled for this site.`;
     case 'auth/unauthorized-domain':
       return 'This domain is not authorised for sign-in.';
     case 'auth/captcha-check-failed':
       return 'Verification failed. Please try again.';
+    /*
+     * The same address already signed in through another provider. Firebase
+     * refuses to guess which identity is meant, and the customer cannot tell
+     * from the raw code what to do about it.
+     */
+    case 'auth/account-exists-with-different-credential':
+      return 'This email is already linked to a different sign-in method. Please use the one you signed up with.';
+    case 'auth/popup-blocked':
+      return 'Your browser blocked the sign-in window. Please allow pop-ups and try again.';
     default:
+      if (provider !== 'phone') return e?.message || `${providerName} sign-in failed. Please try again.`;
       return e?.message || t?.otpSendFailed || 'Failed to send OTP. Please try again.';
   }
 }
@@ -234,6 +257,65 @@ export function useAuthFlow({ handleOpenChange, isRegistration = false }: { hand
     await requestOtp();
   };
 
+  /**
+   * Everything that has to happen after any successful sign-in: adopt the
+   * customer and fold the guest's local favourites into their account. Shared
+   * so the social paths cannot drift from the phone path.
+   */
+  const finishLogin = async (user: any) => {
+    handleOpenChange(false);
+    if (user) setUser(user);
+    try {
+      const slug = storeInfo?.slug;
+      const localIds = getFavoriteIds(slug!);
+      const res = await syncFavorites(adminId, storeId, user._id, localIds);
+      setFavoritesFromIds(slug!, res?.productIds ?? []);
+    } catch (e) {
+      console.error('Favorites sync after auth failed:', e);
+    }
+  };
+
+  /**
+   * Google and Apple, via a popup.
+   *
+   * The backend identifies a customer by phone or email, and these providers
+   * never return a phone number — so the address is what ties the account to a
+   * customer record. Apple in particular only releases the address on the very
+   * first authorisation, and only if the customer does not hide it, which is why
+   * a missing email is reported rather than silently creating a guest.
+   */
+  const signInWithProvider = async (providerName: 'google' | 'apple') => {
+    setSendError(undefined);
+    setDisabled(true);
+    try {
+      const provider = providerName === 'google' ? googleProvider : appleProvider;
+      const credential = await signInWithPopup(auth, provider);
+      const email = credential.user.email;
+
+      if (!email) {
+        setSendError(t?.socialNoEmail ?? 'This account did not share an email address. Please sign in with your phone number.');
+        return;
+      }
+
+      const user = await loginUserWithProvider(adminId, storeId, {
+        email,
+        name: credential.user.displayName ?? undefined,
+        provider: providerName,
+      });
+      await finishLogin(user);
+    } catch (e: any) {
+      // Closing the popup is a choice, not a fault — say nothing.
+      if (e?.code === 'auth/popup-closed-by-user' || e?.code === 'auth/cancelled-popup-request') return;
+      console.error('[auth] social sign-in failed', e?.code, e);
+      setSendError(describeAuthError(e, t, providerName));
+    } finally {
+      setDisabled(false);
+    }
+  };
+
+  const signInWithGoogle = () => signInWithProvider('google');
+  const signInWithApple = () => signInWithProvider('apple');
+
   const onOpenChangeInternal = (open: boolean) => {
     handleOpenChange(open);
 
@@ -261,6 +343,6 @@ export function useAuthFlow({ handleOpenChange, isRegistration = false }: { hand
   return {
     t, step, setStep, disabled, formData, detailsErrors, otp, setOtp, otpError, setOtpError,
     sendError, normalizedPhone, handleChange, requestOtp, verifyOtp, resendOtp, onOpenChangeInternal,
-    isRegistration,
+    isRegistration, signInWithGoogle, signInWithApple,
   };
 }

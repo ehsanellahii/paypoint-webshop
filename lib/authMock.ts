@@ -18,3 +18,11 @@ export const MOCK_OTP_ENABLED = process.env.NEXT_PUBLIC_MOCK_OTP !== 'false';
 
 /** The code the mock flow accepts. Six zeros, matching the six-digit input. */
 export const MOCK_OTP_CODE = '000000';
+
+/**
+ * Apple sign-in needs a paid Apple Developer account, a Service ID and a key
+ * uploaded to Firebase. Until that is done the provider is off in the console
+ * and the button can only fail, so it can be hidden with
+ * NEXT_PUBLIC_APPLE_SIGNIN=off rather than shipping a control that errors.
+ */
+export const APPLE_SIGNIN_ENABLED = process.env.NEXT_PUBLIC_APPLE_SIGNIN !== 'off';

@@ -237,6 +237,42 @@ export const loginUser = async (adminId: string, storeId: string, phoneNumberWit
   }
 };
 
+/**
+ * Log in a customer who signed in with Google or Apple.
+ *
+ * `loginCustomerOnly` matches on phone **or** email, so an address is enough to
+ * find or create the customer — social providers never give us a phone number.
+ * `signInWith` records which provider it was, alongside the existing 'phone'.
+ */
+export const loginUserWithProvider = async (
+  adminId: string,
+  storeId: string,
+  { email, name, provider }: { email: string; name?: string; provider: 'google' | 'apple' },
+) => {
+  const API_URL = `${API_BASE_URL}/user/login`;
+  API_HEADERS['x-paypoint-tenant-id'] = adminId;
+  API_HEADERS['x-paypoint-store-id'] = storeId;
+
+  const response = await fetch(API_URL, {
+    method: 'POST',
+    headers: API_HEADERS,
+    body: JSON.stringify({
+      email,
+      signInSource: 'web',
+      signInWith: provider,
+      ...(name ? { name } : {}),
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message ?? `Login failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data?.data;
+};
+
 export const registerUser = async (adminId: string, storeId: string, name: string, phoneNumberWithCode: string) => {
   const API_URL = `${API_BASE_URL}/user/register`;
   API_HEADERS['x-paypoint-tenant-id'] = adminId;

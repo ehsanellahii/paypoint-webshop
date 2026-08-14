@@ -128,6 +128,7 @@ export interface Translations {
   free: string;
   /** Distinct from `free` — that one also labels zero-cost product options. */
   freeDelivery: string;
+  socialNoEmail: string;
   aboutRestaurant: string;
   website: string;
   /* Diagnostic markers: shown in place of data the backend does not supply. */
@@ -496,6 +497,7 @@ export const translations: Record<Language, Translations> = {
     minimumOrderValue: 'Min. order',
     free: 'Free',
     freeDelivery: 'Free delivery',
+    socialNoEmail: 'This account did not share an email address. Please sign in with your phone number instead.',
     aboutRestaurant: 'About us',
     website: 'Website',
     notProvided: 'not provided',
@@ -861,6 +863,7 @@ export const translations: Record<Language, Translations> = {
     minimumOrderValue: 'MBW',
     free: 'Gratis',
     freeDelivery: 'Lieferung gratis',
+    socialNoEmail: 'Dieses Konto hat keine E-Mail-Adresse freigegeben. Bitte melden Sie sich mit Ihrer Telefonnummer an.',
     aboutRestaurant: 'Über uns',
     website: 'Webseite',
     notProvided: 'fehlt',
