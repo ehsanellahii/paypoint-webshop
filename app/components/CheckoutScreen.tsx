@@ -12,6 +12,7 @@ import { buildStaticMap } from '~/lib/staticMap';
 import RouteMap from '~/components/checkout/RouteMap';
 import ShopHeaderMinimal from '~/components/menu/ShopHeaderMinimal';
 import StripePaymentSheet from '~/components/checkout/StripePaymentSheet';
+import AuthenticationDialog from '~/components/dialogs/Authentication/AuthenticationDialog';
 import UserDrawer from '~/components/Header/UserDrawer';
 
 import DeliveryAddressModal from '~/components/dialogs/DeliveryAddressModal';
@@ -74,7 +75,7 @@ export default function CheckoutScreen() {
     addressOpen, setAddressOpen, payOpen, setPayOpen, voucherOpen, setVoucherOpen,
     preorderOpen, setPreorderOpen,
     touched, placing, submitError, emailValid, phoneValid,
-    placeLabel, placeHint, canPlace, placeOrder, payNow, setPayNow,
+    placeLabel, placeHint, canPlace, placeOrder, payNow, setPayNow, verifyOpen, setVerifyOpen,
   } = useCheckout();
 
   const [accountOpen, setAccountOpen] = useState(false);
@@ -456,6 +457,13 @@ export default function CheckoutScreen() {
           returnUrl={typeof window !== 'undefined' ? `${window.location.origin}/${storeInfo?.slug ?? ''}/confirmation?order=${payNow.orderId}` : ''}
         />
       )}
+
+      {/*
+        Verification gate. `AuthenticationDialog` already picks the right
+        presentation — a split-panel dialog on desktop, a full screen on a
+        phone — so the checkout does not need its own copy of either.
+      */}
+      <AuthenticationDialog isOpen={verifyOpen} handleOpenChange={setVerifyOpen} />
 
       <VoucherFlash />
 

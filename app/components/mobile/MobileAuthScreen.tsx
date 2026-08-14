@@ -5,7 +5,7 @@ import OtpInput from 'react-otp-input';
 
 import BrandMark from '~/components/menu/BrandMark';
 import { useAuthFlow } from '~/hooks/useAuthFlow';
-import { APPLE_SIGNIN_ENABLED } from '~/lib/authMock';
+import { APPLE_SIGNIN_ENABLED } from '~/lib/firebase';
 import { useStore } from '~/contexts/store-context';
 import { getStoreCover } from '~/lib/storeMedia';
 import { cn } from '~/lib/utils';

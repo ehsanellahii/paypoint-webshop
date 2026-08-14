@@ -34,6 +34,11 @@ export default function BrandMark({ size = 'header', onClick }: { size?: keyof t
   const brand = storeInfo?.brandName || 'Restaurant';
 
   const content = logo ? (
+    /*
+     * No alignment of its own: the navbar centres it in a row, while the auth
+     * heroes are column flex and pin it with `items-start` (without which
+     * `align-self: stretch` beats `w-auto` and squashes the artwork).
+     */
     <img src={logo} alt={brand} className={cn('block w-auto', HEIGHTS[size])} />
   ) : (
     <span className={cn('font-script leading-none text-white', FALLBACK_TEXT[size])}>{brand}</span>

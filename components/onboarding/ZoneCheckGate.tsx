@@ -302,6 +302,7 @@ function DesktopZonePanel({
   t,
   brand,
   cover,
+  logo,
   query,
   predictions,
   loading,
@@ -325,10 +326,20 @@ function DesktopZonePanel({
       <div className='anim-fade grid w-full max-w-[1060px] grid-cols-1 overflow-hidden rounded-[28px] border border-border bg-card shadow-[0_40px_90px_-30px_rgba(0,0,0,0.8)] md:grid-cols-[1.05fr_1fr]'>
         {/* Left hero */}
         <div className='relative hidden min-h-[580px] flex-col justify-between overflow-hidden p-11 md:flex'>
-          <div className='absolute inset-0 bg-[#0f0f11] bg-cover bg-center' style={cover ? { backgroundImage: `url("${cover}")` } : undefined} />
+          <div
+            className='absolute inset-0 bg-[#0f0f11] bg-top bg-no-repeat'
+            style={cover ? { backgroundImage: `url("${cover}")`, backgroundSize: '100% auto' } : undefined}
+          />
           <div className='absolute inset-0 bg-gradient-to-b from-[rgba(15,15,17,0.55)] to-[rgba(15,15,17,0.82)]' />
-          <div className='relative flex flex-col leading-[0.9]'>
-            <span className='font-script text-[34px] leading-none text-white'>{brand}</span>
+          <div className='relative flex flex-col items-start leading-[0.9]'>
+            {/* The design shows the logo here, same as the auth hero; the
+                script wordmark is only the fallback for a store without one. */}
+            {logo ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logo} alt={brand} className='block h-[76px] w-auto self-start rounded-[14px]' />
+            ) : (
+              <span className='font-script text-[34px] leading-none text-white'>{brand}</span>
+            )}
           </div>
           <div className='relative'>
             <h2 className='m-0 max-w-[340px] font-serif text-[38px] font-extrabold leading-[1.08] tracking-tight'>{t.zoneHeroTitle ?? 'Real cuisine, fresh to your door.'}</h2>

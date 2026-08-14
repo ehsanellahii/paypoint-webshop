@@ -51,3 +51,10 @@ appleProvider.addScope('name');
  * throw during server rendering. Load it from a client effect if it is ever
  * wanted.
  */
+
+/**
+ * Apple sign-in needs a paid Apple Developer account, a Service ID and a key
+ * uploaded to Firebase. Until that is configured the provider is off and the
+ * button can only fail, so it can be hidden with NEXT_PUBLIC_APPLE_SIGNIN=off.
+ */
+export const APPLE_SIGNIN_ENABLED = process.env.NEXT_PUBLIC_APPLE_SIGNIN !== 'off';

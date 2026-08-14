@@ -18,10 +18,15 @@ export default function AuthHero({ title, sub }: { title: string; sub?: string }
 
   return (
     <div className='relative hidden min-h-[600px] min-w-0 flex-col justify-between overflow-hidden p-[46px_44px] md:flex'>
-      <div className='absolute inset-0 bg-[#0f0f11] bg-cover bg-center' style={cover ? { backgroundImage: `url("${cover}")` } : undefined} />
+      {/* Design: `background-size:100% auto; background-position:center top`.
+          `bg-cover` zoomed the photo in and cropped the sides. */}
+      <div
+        className='absolute inset-0 bg-[#0f0f11] bg-top bg-no-repeat'
+        style={cover ? { backgroundImage: `url("${cover}")`, backgroundSize: '100% auto' } : undefined}
+      />
       <div className='absolute inset-0 bg-[linear-gradient(180deg,rgba(15,15,17,0.55),rgba(15,15,17,0.82))]' />
 
-      <div className='relative flex flex-col leading-[0.9]'>
+      <div className='relative flex flex-col items-start leading-[0.9]'>
         <BrandMark size='auth' />
       </div>
 

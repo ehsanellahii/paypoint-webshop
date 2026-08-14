@@ -162,7 +162,6 @@ export interface Translations {
   confirm: string;
   otpSentTo: string;
   resendOtp: string;
-  demoCode: string;
   active: string;
   pastOrders: string;
   paymentCards: string;
@@ -530,7 +529,6 @@ export const translations: Record<Language, Translations> = {
     confirm: 'Confirm',
     otpSentTo: 'Sent to',
     resendOtp: 'Send the code again',
-    demoCode: 'Demo code',
     active: 'Active',
     pastOrders: 'Past orders',
     paymentCards: 'Credit cards',
@@ -896,7 +894,6 @@ export const translations: Record<Language, Translations> = {
     confirm: 'Bestätigen',
     otpSentTo: 'Gesendet an',
     resendOtp: 'Code erneut senden',
-    demoCode: 'Demo-Code',
     active: 'Aktiv',
     pastOrders: 'Frühere Bestellungen',
     paymentCards: 'Kreditkarten',

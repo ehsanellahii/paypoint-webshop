@@ -9,7 +9,6 @@ import LoginOtpStep from './LoginOTPStep';
 import MobileAuthScreen from '~/app/components/mobile/MobileAuthScreen';
 import { useAuthFlow } from '~/hooks/useAuthFlow';
 import { useIsMobile } from '~/contexts/device-context';
-import { MOCK_OTP_CODE, MOCK_OTP_ENABLED } from '~/lib/authMock';
 
 type Props = {
   isOpen: boolean;
@@ -35,6 +34,7 @@ function DesktopAuthDialog({ isOpen, handleOpenChange, isRegistration = false }:
   const {
     t, step, setStep, disabled, formData, detailsErrors, otp, setOtp, otpError, setOtpError,
     sendError, normalizedPhone, handleChange, requestOtp, verifyOtp, resendOtp, onOpenChangeInternal,
+    signInWithGoogle, signInWithApple,
   } = useAuthFlow({ handleOpenChange, isRegistration });
 
   return (
@@ -69,6 +69,8 @@ function DesktopAuthDialog({ isOpen, handleOpenChange, isRegistration = false }:
                 onClose={() => onOpenChangeInternal(false)}
                 onSendOtp={requestOtp}
                 sendError={sendError}
+                onGoogle={signInWithGoogle}
+                onApple={signInWithApple}
                 withName
               />
             ) : (
@@ -85,7 +87,6 @@ function DesktopAuthDialog({ isOpen, handleOpenChange, isRegistration = false }:
                 onBack={() => setStep('details')}
                 onResend={resendOtp}
                 onVerify={verifyOtp}
-                demoCode={MOCK_OTP_ENABLED ? MOCK_OTP_CODE : undefined}
               />
             )}
           </Dialog.Popup>

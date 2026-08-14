@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLanguage } from '~/contexts/language-context';
 
 import { loginSchema, registrationSchema, RegistrationFormValues, type LoginFormValues } from '~/components/dialogs/Authentication/auth.schema';
@@ -15,7 +15,6 @@ import { loginUser, loginUserWithProvider, registerUser, syncFavorites } from '~
 import { useStore } from '~/contexts/store-context';
 import { useUser } from '~/contexts/user-context';
 import { getFavoriteIds, setFavoritesFromIds } from '~/lib/favorites';
-import { MOCK_OTP_CODE, MOCK_OTP_ENABLED } from '~/lib/authMock';
 
 /**
  * Turn a Firebase auth error into something a customer can act on.
@@ -40,7 +39,17 @@ function describeAuthError(
     case 'auth/quota-exceeded':
     case 'auth/billing-not-enabled':
       return 'SMS sending is currently unavailable. Please try again later.';
+    /*
+     * Firebase returns this one code for two unrelated causes: the provider is
+     * switched off, or the SMS region policy does not allow the number's
+     * country. Only the message distinguishes them, and sending someone to the
+     * provider toggle when the real block is the region list wastes a lot of
+     * time.
+     */
     case 'auth/operation-not-allowed':
+      if (/region/i.test(e?.message ?? '')) {
+        return 'SMS to this country is not enabled yet. Please try another number or contact us.';
+      }
       return `${providerName} sign-in is not enabled for this site.`;
     case 'auth/unauthorized-domain':
       return 'This domain is not authorised for sign-in.';
@@ -102,6 +111,24 @@ export function useAuthFlow({ handleOpenChange, isRegistration = false }: { hand
   // ✅ Keep recaptcha verifier instance so we don’t recreate repeatedly
   const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
 
+  /*
+   * Release the reCAPTCHA widget if the screen goes away without passing
+   * through the close handler — a browser back gesture on mobile, where this is
+   * a route rather than a dialog. grecaptcha keeps a global registry keyed on
+   * the element, so an abandoned widget is worth clearing explicitly.
+   */
+  useEffect(
+    () => () => {
+      if (recaptchaVerifierRef.current) {
+        try {
+          recaptchaVerifierRef.current.clear();
+        } catch {}
+        recaptchaVerifierRef.current = null;
+      }
+    },
+    [],
+  );
+
   const normalizedPhone = useMemo(() => {
     const code = formData.phoneCode;
     const number = formData.phoneNumber.replace(/\s/g, '');
@@ -154,14 +181,6 @@ export function useAuthFlow({ handleOpenChange, isRegistration = false }: { hand
       setOtpError(undefined);
       setSendError(undefined);
 
-      if (MOCK_OTP_ENABLED) {
-        // No SMS is sent — see lib/authMock.ts.
-        console.warn('[auth] mock OTP flow active — accepting', MOCK_OTP_CODE);
-        confirmationResultRef.current = null;
-        setStep('otp');
-        return;
-      }
-
       const verifier = setupRecaptcha();
 
       // ✅ Send SMS OTP
@@ -196,7 +215,7 @@ export function useAuthFlow({ handleOpenChange, isRegistration = false }: { hand
     }
 
     const confirmationResult = confirmationResultRef.current;
-    if (!MOCK_OTP_ENABLED && !confirmationResult) {
+    if (!confirmationResult) {
       setOtpError(t?.otpSessionExpired ?? 'OTP session expired. Please resend OTP.');
       return;
     }
@@ -205,16 +224,7 @@ export function useAuthFlow({ handleOpenChange, isRegistration = false }: { hand
       setDisabled(true);
       setOtpError(undefined);
 
-      if (MOCK_OTP_ENABLED) {
-        if (parsed.data.otp !== MOCK_OTP_CODE) {
-          setOtpError(t?.invalidOtp ?? 'Invalid OTP. Please try again.');
-          setDisabled(false);
-          return;
-        }
-      } else {
-        // ✅ Verify code with Firebase
-        await confirmationResult!.confirm(parsed.data.otp);
-      }
+      await confirmationResult.confirm(parsed.data.otp);
 
       // ✅ Firebase token (send to your backend if you want to create/update user)
       // const idToken = await cred.user.getIdToken();

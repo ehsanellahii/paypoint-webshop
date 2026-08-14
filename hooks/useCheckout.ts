@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import moment from 'moment-timezone';
 
 import { useCart } from '~/contexts/cart-context';
@@ -47,7 +47,7 @@ const ONLINE_METHODS = new Set<PaymentMethod>(['applePay', 'paypal', 'klarna']);
 export function useCheckout() {
   const { t } = useLanguage();
   const storeInfo = useStore();
-  const { setUser } = useUser();
+  const { user, setUser } = useUser();
   const { cart, totalPrice, totalItems, discountAmount, appliedVoucher, clearCart, orderMessage } = useCart();
   const { orderType, setOrderType, deliveryAddress, setDeliveryAddress, savedAddresses } = useAddress();
   const { slug, toMenu, toConfirmation } = useStoreNavigation();
@@ -86,6 +86,13 @@ export function useCheckout() {
   const [placing, setPlacing] = useState(false);
   /** Set once Stripe has something to charge; drives the payment sheet. */
   const [payNow, setPayNow] = useState<{ clientSecret: string; stripeAccountId: string; amount: number; orderId: string } | null>(null);
+  /*
+   * Opens the sign-in flow when an unverified customer tries to order. The
+   * order is not abandoned — `placeOrder` runs again by itself once the
+   * customer comes back verified, so they press the button once, not twice.
+   */
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  const resumeAfterVerify = useRef(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Prefill from the last order, and pick up a pre-order slot chosen on the menu.
@@ -201,9 +208,22 @@ export function useCheckout() {
     setSubmitError(null);
     if (!canPlace || placing) return;
 
+    /*
+     * A dine-in order is placed at the table, so the guest is already physically
+     * accountable and we ask for nothing. Everyone else must have proved their
+     * number or email before an order is created.
+     */
+    if (!isDineIn && !user?.isVerified) {
+      resumeAfterVerify.current = true;
+      setVerifyOpen(true);
+      return;
+    }
+
     setPlacing(true);
     try {
-      const user = await loginCustomer();
+      // Named apart from the context `user`: a `const user` here would shadow
+      // it for the whole function, putting the verification gate above in its TDZ.
+      const customer = await loginCustomer();
 
       const orderData: any = {
         adminId: storeInfo?.adminId || '',
@@ -250,7 +270,7 @@ export function useCheckout() {
           tableToken: storeInfo?.tableInfo?.token || '',
         };
       }
-      if (user?._id) orderData.customerId = user._id;
+      if (customer?._id) orderData.customerId = customer._id;
       if (appliedVoucher) {
         orderData.vouchers = [
           {
@@ -295,7 +315,7 @@ export function useCheckout() {
         const reservedId = reserved?.id || reserved?._id;
         if (!reservedId) throw new Error('Could not reserve the order');
 
-        const intent = await createPaymentIntent(String(reservedId), user?._id, paymentMethod);
+        const intent = await createPaymentIntent(String(reservedId), customer?._id, paymentMethod);
         setPayNow({
           clientSecret: intent.client_secret,
           stripeAccountId: intent.stripe_account_id,
@@ -364,6 +384,19 @@ export function useCheckout() {
     savePreorderSlot(slug, slot);
   };
 
+  /*
+   * The customer verified and came back: finish the order they already asked
+   * for. Keyed on the flag rather than on the sheet closing, so dismissing the
+   * dialog without verifying does nothing.
+   */
+  useEffect(() => {
+    if (!resumeAfterVerify.current || !user?.isVerified) return;
+    resumeAfterVerify.current = false;
+    setVerifyOpen(false);
+    void placeOrder();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.isVerified]);
+
   return {
     // context
     t, storeInfo, cart, totalPrice, totalItems, discountAmount, appliedVoucher, orderMessage,
@@ -383,6 +416,7 @@ export function useCheckout() {
     preorderOpen, setPreorderOpen,
     // validation + submit
     touched, placing, submitError, emailValid, phoneValid, missing, payNow, setPayNow,
+    verifyOpen, setVerifyOpen,
     belowMinimum, deliveryUnavailable, canPlace, placeLabel, placeHint, placeOrder,
   };
 }

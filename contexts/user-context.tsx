@@ -40,6 +40,12 @@ export type User = {
   postalCode?: string;
 
   isGuest?: boolean;
+  /**
+   * Set by the backend once the customer proved they hold the number or email
+   * (SMS OTP, or Google/Apple). Checkout asks anyone without it to verify
+   * before the order goes through.
+   */
+  isVerified?: boolean;
 
   userLatitude?: number;
   userLongitude?: number;

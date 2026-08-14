@@ -17,10 +17,9 @@ type Props = {
   onResend: () => void;
   onVerify: () => void;
   /** Shown as the prototype's demo chip while the mock sign-in flow is active. */
-  demoCode?: string;
 };
 
-export default function LoginOtpStep({ disabled, phoneLabel, otp, otpError, otpLength = 6, onChangeOtp, onBack, onVerify, demoCode }: Props) {
+export default function LoginOtpStep({ disabled, phoneLabel, otp, otpError, otpLength = 6, onChangeOtp, onBack, onVerify }: Props) {
   const { t } = useLanguage();
   const [focusIdx, setFocusIdx] = useState(-1);
 
@@ -108,11 +107,6 @@ export default function LoginOtpStep({ disabled, phoneLabel, otp, otpError, otpL
         {t.confirm}
       </button>
 
-      {demoCode && (
-        <div className='mt-4 inline-flex self-start items-center gap-2 rounded-[11px] border border-border bg-background px-[13px] py-2 text-[12.5px] font-semibold text-muted-foreground'>
-          {t.demoCode}: <span className='font-extrabold tracking-[0.1em] text-white'>{demoCode}</span>
-        </div>
-      )}
     </div>
   );
 }
