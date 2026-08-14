@@ -1,5 +1,5 @@
 import CheckoutSkeleton from '~/app/components/CheckoutSkeleton';
-import MobileSkeleton from '~/components/mobile/MobileSkeleton';
+import { MobileCheckoutSkeleton } from '~/components/mobile/MobileSkeleton';
 import { getDevice } from '~/lib/device';
 
 /*
@@ -9,5 +9,5 @@ import { getDevice } from '~/lib/device';
  */
 export default async function Loading() {
   const device = await getDevice();
-  return device === 'mobile' ? <MobileSkeleton /> : <CheckoutSkeleton />;
+  return device === 'mobile' ? <MobileCheckoutSkeleton /> : <CheckoutSkeleton />;
 }
