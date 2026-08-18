@@ -6,25 +6,35 @@ export const API_BASE_URL = process.env.NODE_ENV === 'production' ? 'https://api
 export const PAYMENTS_BASE_URL = API_BASE_URL.replace(/\/integration$/, '/payments');
 export const PAYMENT_API_KEY = process.env.NEXT_PUBLIC_PAYMENT_API_KEY ?? '';
 
-export const X_API_KEY = 'b3db8d621de8b0b9ab5351d05779f400:92b2cbc1e4bdcb0ab019ea16ae31d3fea304508e734672a5cf6661cded997f0c';
-// export const API_BASE_URL = 'http://localhost:4000/integration';
-const API_HEADERS: {
-  'accept': string;
-  'content-type': string;
-  'x-paypoint-tenant-id'?: string;
-  'x-paypoint-store-id'?: string;
-  'x-api-key': string;
-} = {
-  'accept': 'application/json',
-  'content-type': 'application/json',
-  'x-api-key': X_API_KEY,
-};
+/**
+ * Headers for a storefront call.
+ *
+ * `apiKey` is the tenant key the slug endpoint hands back for the store being
+ * shown — see `getStoreData`. It carries the tenant on the integration routes,
+ * so a call made without it reaches the server as the wrong restaurant.
+ *
+ * Built fresh per call on purpose. This used to be one shared object that each
+ * function mutated with the current tenant and store, which meant whatever the
+ * last caller set leaked into every later request that reused it — including
+ * server-rendered ones serving a different store.
+ */
+export function apiHeaders(opts: { apiKey?: string; adminId?: string; storeId?: string } = {}) {
+  const headers: Record<string, string> = {
+    accept: 'application/json',
+    'content-type': 'application/json',
+  };
+  if (opts.apiKey) headers['x-api-key'] = opts.apiKey;
+  if (opts.adminId) headers['x-paypoint-tenant-id'] = opts.adminId;
+  if (opts.storeId) headers['x-paypoint-store-id'] = opts.storeId;
+  return headers;
+}
 
 export const getStoreData = cache(async (slug: string, token?: string) => {
   if (!slug) return null;
   const tokenParam = token ? `?token=${token}` : '';
+  // Public, and the source of the key itself — so it sends none.
   const response = await fetch(`${API_BASE_URL}/slugs/${slug}${tokenParam}`, {
-    headers: API_HEADERS,
+    headers: apiHeaders(),
     cache: 'no-store',
   });
   /*
@@ -50,7 +60,6 @@ export const getStoreData = cache(async (slug: string, token?: string) => {
    */
   return {
     brandName: data?.data?.brandName,
-    storeName: data?.data?.store_name,
     /** Branch name — `brandName` above is the firm. */
     name: data?.data?.name || '',
     about: data?.data?.about || '',
@@ -72,6 +81,13 @@ export const getStoreData = cache(async (slug: string, token?: string) => {
     // up as soon as one of them ships. See docs/backend-pending.md.
     coverImage: data?.data?.coverFileName || data?.data?.webShopSettings?.coverImage ? `${getImageURL(data?.data?.coverFileName || data?.data?.webShopSettings?.coverImage)}` : null,
     timings: data?.data?.timings || null,
+    /*
+     * Gates the online payment methods. Deliberately defaulted to false: a
+     * store whose payload predates this field, or whose Stripe link is broken,
+     * should offer cash rather than take the customer through a payment that
+     * cannot succeed.
+     */
+    stripeChargesEnabled: !!data?.data?.stripeChargesEnabled,
     slug: slug,
     settings: data?.data?.webShopSettings
       ? {
@@ -88,6 +104,13 @@ export const getStoreData = cache(async (slug: string, token?: string) => {
     postalRates: data?.data?.postalRates || [],
     storeId: data?.data?._id || '',
     adminId: data?.data?.adminId || '',
+    /*
+     * The tenant key for this store, minted by the server per request. Every
+     * other storefront call carries it so the server resolves the right
+     * restaurant — a call without it lands on whatever tenant the old
+     * hardcoded key named.
+     */
+    apiKey: data?.data?.apiKey || '',
     tableInfo: {
       token: data?.data?.tableInfo?.token || '',
       areaId: data?.data?.tableInfo?.areaId || '',
@@ -98,18 +121,14 @@ export const getStoreData = cache(async (slug: string, token?: string) => {
   };
 });
 
-export const resolveFavorites = async (adminId: string, storeId: string, productIds: string[]) => {
+export const resolveFavorites = async (adminId: string, storeId: string, apiKey: string, productIds: string[]) => {
   if (!storeId || productIds.length === 0 || !adminId) {
     return { products: [], missingIds: [] };
   }
 
   const response = await fetch(`${API_BASE_URL}/favorites/resolve`, {
     method: 'POST',
-    headers: {
-      ...API_HEADERS,
-      'x-paypoint-tenant-id': adminId,
-      'x-paypoint-store-id': storeId,
-    },
+    headers: apiHeaders({ apiKey, adminId, storeId }),
     body: JSON.stringify({ productIds }),
     cache: 'no-store',
   });
@@ -126,18 +145,14 @@ export const resolveFavorites = async (adminId: string, storeId: string, product
   };
 };
 
-export const syncFavorites = async (adminId: string, storeId: string, customerId: string, productIds: string[]) => {
+export const syncFavorites = async (adminId: string, storeId: string, apiKey: string, customerId: string, productIds: string[]) => {
   if (!adminId || !storeId || !customerId) {
     throw new Error('Admin ID, Store ID, and Customer ID are required to sync favorites.');
   }
 
   const response = await fetch(`${API_BASE_URL}/favorites/sync`, {
     method: 'POST',
-    headers: {
-      ...API_HEADERS,
-      'x-paypoint-tenant-id': adminId,
-      'x-paypoint-store-id': storeId,
-    },
+    headers: apiHeaders({ apiKey, adminId, storeId }),
     body: JSON.stringify({ customerId, productIds }),
     cache: 'no-store',
   });
@@ -154,17 +169,13 @@ export const syncFavorites = async (adminId: string, storeId: string, customerId
  * Backed by the server's co-purchase product pairings. Returns [] on failure so
  * the cart can fall back to a simple menu slice.
  */
-export const fetchCartRecommendations = async (adminId: string, storeId: string, productIds: string[], limit = 8): Promise<MenuProduct[]> => {
+export const fetchCartRecommendations = async (adminId: string, storeId: string, apiKey: string, productIds: string[], limit = 8): Promise<MenuProduct[]> => {
   if (!adminId || !storeId) return [];
 
   try {
     const response = await fetch(`${API_BASE_URL}/recommendations/cart`, {
       method: 'POST',
-      headers: {
-        ...API_HEADERS,
-        'x-paypoint-tenant-id': adminId,
-        'x-paypoint-store-id': storeId,
-      },
+      headers: apiHeaders({ apiKey, adminId, storeId }),
       body: JSON.stringify({ productIds, limit }),
       cache: 'no-store',
     });
@@ -179,17 +190,15 @@ export const fetchCartRecommendations = async (adminId: string, storeId: string,
   }
 };
 
-export const fetchMenuData = async (adminId?: string, storeId?: string) => {
+export const fetchMenuData = async (adminId?: string, storeId?: string, apiKey?: string) => {
   if (!adminId || !storeId) {
     throw new Error('Admin ID and Store ID are required to fetch menu data.');
   }
   const API_URL = `${API_BASE_URL}/menu`;
-  API_HEADERS['x-paypoint-tenant-id'] = adminId;
-  API_HEADERS['x-paypoint-store-id'] = storeId;
 
   try {
     const response = await fetch(API_URL, {
-      headers: API_HEADERS,
+      headers: apiHeaders({ apiKey, adminId, storeId }),
       next: { revalidate: 60 },
     });
 
@@ -208,16 +217,14 @@ export const fetchMenuData = async (adminId?: string, storeId?: string) => {
   }
 };
 
-export const loginUser = async (adminId: string, storeId: string, phoneNumberWithCode: string, name?: string) => {
+export const loginUser = async (adminId: string, storeId: string, apiKey: string, phoneNumberWithCode: string, name?: string) => {
   const API_URL = `${API_BASE_URL}/user/login`;
-  API_HEADERS['x-paypoint-tenant-id'] = adminId;
-  API_HEADERS['x-paypoint-store-id'] = storeId;
   // `name` is optional server-side; sending it updates the stored customer name.
   const requestBody = { phoneNumber: phoneNumberWithCode, signInSource: 'web', signInWith: 'phone', ...(name ? { name } : {}) };
   try {
     const response = await fetch(API_URL, {
       method: 'POST',
-      headers: API_HEADERS,
+      headers: apiHeaders({ apiKey, adminId, storeId }),
       body: JSON.stringify({
         ...requestBody,
       }),
@@ -247,15 +254,14 @@ export const loginUser = async (adminId: string, storeId: string, phoneNumberWit
 export const loginUserWithProvider = async (
   adminId: string,
   storeId: string,
+  apiKey: string,
   { email, name, provider }: { email: string; name?: string; provider: 'google' | 'apple' },
 ) => {
   const API_URL = `${API_BASE_URL}/user/login`;
-  API_HEADERS['x-paypoint-tenant-id'] = adminId;
-  API_HEADERS['x-paypoint-store-id'] = storeId;
 
   const response = await fetch(API_URL, {
     method: 'POST',
-    headers: API_HEADERS,
+    headers: apiHeaders({ apiKey, adminId, storeId }),
     body: JSON.stringify({
       email,
       signInSource: 'web',
@@ -273,15 +279,13 @@ export const loginUserWithProvider = async (
   return data?.data;
 };
 
-export const registerUser = async (adminId: string, storeId: string, name: string, phoneNumberWithCode: string) => {
+export const registerUser = async (adminId: string, storeId: string, apiKey: string, name: string, phoneNumberWithCode: string) => {
   const API_URL = `${API_BASE_URL}/user/register`;
-  API_HEADERS['x-paypoint-tenant-id'] = adminId;
-  API_HEADERS['x-paypoint-store-id'] = storeId;
   const requestBody = { name, phoneNumber: phoneNumberWithCode, signInSource: 'web', signInWith: 'phone' };
   try {
     const response = await fetch(API_URL, {
       method: 'POST',
-      headers: API_HEADERS,
+      headers: apiHeaders({ apiKey, adminId, storeId }),
       body: JSON.stringify(requestBody),
     });
     if (!response.ok) {
@@ -297,14 +301,12 @@ export const registerUser = async (adminId: string, storeId: string, name: strin
   }
 };
 
-export const mergeFavorites = (adminId: string, storeId: string, customerId: string, productIds: string[]) => {
+export const mergeFavorites = (adminId: string, storeId: string, apiKey: string, customerId: string, productIds: string[]) => {
   const API_URL = `${API_BASE_URL}/favorites/merge`;
-  API_HEADERS['x-paypoint-tenant-id'] = adminId;
-  API_HEADERS['x-paypoint-store-id'] = storeId;
 
   return fetch(API_URL, {
     method: 'POST',
-    headers: API_HEADERS,
+    headers: apiHeaders({ apiKey, adminId, storeId }),
     body: JSON.stringify({ customerId, productIds }),
   })
     .then((response) => {
@@ -414,7 +416,7 @@ export const formatPrice = (value: number | string | null | undefined) => {
 // export async function fetchMenuData(): Promise<SiteData> {
 //   try {
 //     const response = await fetch(`${API_BASE_URL}/menu`, {
-//       headers: API_HEADERS,
+//       headers: apiHeaders({ apiKey, adminId, storeId }),
 //       next: { revalidate: 60 },
 //     });
 
@@ -465,10 +467,10 @@ export const formatPrice = (value: number | string | null | undefined) => {
  * confirms an order — a customer who closes the tab mid-payment must not end up
  * with a paid order nobody is cooking, nor a cooked order nobody paid for.
  */
-export const createUnconfirmedOrder = async (adminId: string, storeId: string, orderData: any) => {
+export const createUnconfirmedOrder = async (adminId: string, storeId: string, apiKey: string, orderData: any) => {
   const res = await fetch(`${API_BASE_URL}/order/unconfirmed`, {
     method: 'POST',
-    headers: { ...API_HEADERS, 'x-paypoint-tenant-id': adminId, 'x-paypoint-store-id': storeId },
+    headers: apiHeaders({ apiKey, adminId, storeId }),
     body: JSON.stringify(orderData),
   });
   const json = await res.json().catch(() => ({}));

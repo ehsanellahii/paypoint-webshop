@@ -164,7 +164,7 @@ export default function MobileAuthScreen({ isOpen, handleOpenChange, isRegistrat
                 {t.login}
               </button>
 
-              {/*
+{/*
                 Social sign-in, drawn to the design: an "oder" rule, then Apple
                 and Google side by side on white. Both go through Firebase and
                 then log in against our own backend by email.
@@ -233,8 +233,17 @@ export default function MobileAuthScreen({ isOpen, handleOpenChange, isRegistrat
                           width: '100%',
                           height: 56,
                           borderRadius: 14,
-                          background: filled ? 'var(--surface-3)' : 'var(--card)',
-                          border: `2px solid ${filled ? 'rgba(255,255,255,.25)' : 'transparent'}`,
+                          /*
+                           * The empty box has to read as a field on whatever surface
+                           * the dialog sits on. `--card` did not: it is the desktop
+                           * dialog's own background, so empty boxes vanished entirely
+                           * and only appeared once typed into. `--background` is the
+                           * darkest token on both devices, and the border is always
+                           * drawn rather than being transparent until filled.
+                           */
+                          background: filled ? 'var(--surface-3)' : 'var(--background)',
+                          border: `2px solid ${filled ? 'rgba(255,255,255,.35)' : 'rgba(255,255,255,.14)'}`,
+                          caretColor: '#fff',
                           color: '#fff',
                           fontSize: 22,
                           fontWeight: 800,

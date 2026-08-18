@@ -83,7 +83,7 @@ const saveState = (storageKey: string, state: AddressState) => {
  * storeKey should be something stable per store/tenant (slug is best)
  *
  * Example:
- * <AddressProvider storeKey={storeInfo.storeName || slug}>
+ * <AddressProvider storeKey={slug}>
  *   <CartProvider>...</CartProvider>
  * </AddressProvider>
  */

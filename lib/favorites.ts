@@ -44,12 +44,15 @@ export function isFavorite(storeKey: string, productId: string): boolean {
 export async function toggleFavorite({
   adminId,
   storeId,
+  apiKey,
   customerId,
   slug,
   snapshot,
 }: {
   adminId?: string;
   storeId?: string;
+  /** Tenant key from the store payload; see `apiHeaders`. */
+  apiKey?: string;
   customerId?: string;
   slug: string;
   snapshot: Omit<FavoriteSnapshot, 'addedAt'> & { productId: string };
@@ -83,7 +86,7 @@ export async function toggleFavorite({
 
     try {
       // merge adds missing (good for "add", doesn't remove on "remove")
-      await mergeFavorites(adminId!, storeId!, customerId!, nextIds);
+      await mergeFavorites(adminId!, storeId!, apiKey ?? '', customerId!, nextIds);
     } catch (e) {
       // Don't break UX if network fails; local state stays
       console.error('Favorites sync failed:', e);

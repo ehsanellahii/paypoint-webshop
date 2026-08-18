@@ -55,7 +55,7 @@ function Field({ icon: Icon, children, invalid }: { icon: typeof User; children:
 
 const inputClass = 'min-w-0 flex-1 border-none bg-transparent text-[15px] font-semibold text-white placeholder:text-muted-foreground';
 
-export default function LoginDetailsStep({ loading, values, errors, onChange, onClose, onSendOtp, sendError, withName , onGoogle, onApple}: Props) {
+export default function LoginDetailsStep({ loading, values, errors, onChange, onClose, onSendOtp, sendError, withName, onGoogle, onApple }: Props) {
   const { t } = useLanguage();
   const storeInfo = useStore();
   const brand = storeInfo?.brandName || '';

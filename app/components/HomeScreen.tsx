@@ -59,7 +59,7 @@ export default function HomeScreen() {
     async function loadMenu() {
       try {
         setLoading(true);
-        const data = await fetchMenuData(storeInfo?.adminId, storeInfo?.storeId);
+        const data = await fetchMenuData(storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey);
         setMenuData(data);
         const categories = getCategories(data);
         if (categories.length > 0) setActiveCategory(categories[0].id);
@@ -71,7 +71,7 @@ export default function HomeScreen() {
       }
     }
     loadMenu();
-  }, [storeInfo?.adminId, storeInfo?.storeId]);
+  }, [storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey]);
 
   const productsByCategory = menuData ? getCategories(menuData) : [];
   const allProducts = menuData ? getAllProducts(menuData) : [];

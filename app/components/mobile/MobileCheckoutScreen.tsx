@@ -14,7 +14,7 @@ import { formatPrice } from '~/lib/api';
 import { buildStaticMap } from '~/lib/staticMap';
 import RouteMap from '~/components/checkout/RouteMap';
 import StripePaymentSheet from '~/components/checkout/StripePaymentSheet';
-import AuthenticationDialog from '~/components/dialogs/Authentication/AuthenticationDialog';
+import PhoneVerifyDialog from '~/components/checkout/PhoneVerifyDialog';
 import { cartLineExtras } from '~/lib/cartLine';
 import { cn, formatEtaRange, getImageURL } from '~/lib/utils';
 
@@ -415,11 +415,10 @@ export default function MobileCheckoutScreen() {
 
       <MobilePreorderSheet open={c.preorderOpen} onClose={() => c.setPreorderOpen(false)} onConfirm={c.confirmSchedule} onStandard={() => c.chooseTiming('standard')} />
       {/*
-        Verification gate. `AuthenticationDialog` already picks the right
-        presentation — a split-panel dialog on desktop, a full screen on a
-        phone — so the checkout does not need its own copy of either.
+        Verification gate: its own sheet, seeded with the number already typed
+        above, rather than the sign-in menu.
       */}
-      <AuthenticationDialog isOpen={c.verifyOpen} handleOpenChange={c.setVerifyOpen} />
+      <PhoneVerifyDialog open={c.verifyOpen} onClose={() => c.setVerifyOpen(false)} phone={c.phoneNumber} name={c.customerName} />
 
       <VoucherFlash />
 

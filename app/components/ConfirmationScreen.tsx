@@ -1,87 +1,33 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { FileText, MapPin, CreditCard, Loader2, HelpCircle, ChevronRight, ChevronLeft } from 'lucide-react';
+import { useState } from 'react';
+import { AlertCircle, FileText, MapPin, CreditCard, Loader2, HelpCircle, ChevronRight, ChevronLeft } from 'lucide-react';
 
 import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
 import { useStoreNavigation } from '~/hooks/useStoreNavigation';
+import { useConfirmation } from '~/hooks/useConfirmation';
 import { formatPrice } from '~/lib/api';
 import { buildStaticMap } from '~/lib/staticMap';
 import RouteMap from '~/components/checkout/RouteMap';
-import { fetchPlacedOrder, getPlacedOrder, type PlacedOrder } from '~/lib/lastOrder';
 import { useAddress } from '~/contexts/address-context';
 import ShopHeaderMinimal from '~/components/menu/ShopHeaderMinimal';
 import UserDrawer from '~/components/Header/UserDrawer';
 import { getStatusMeta } from '~/components/Header/OrdersPanel';
+import { serverPaymentMethodLabel } from '~/components/checkout/PaymentSheet';
 
 export default function ConfirmationScreen() {
   const { t } = useLanguage();
   const storeInfo = useStore();
   const { deliveryAddress } = useAddress();
-  const { slug, toMenu } = useStoreNavigation();
-  const searchParams = useSearchParams();
-  const orderRef = searchParams?.get('order') || '';
+  const { toMenu, toCheckout } = useStoreNavigation();
 
-  /*
-   * The placed order lives in sessionStorage, so it can only be read after
-   * mount — the server has no access to it and rendering it during the first
-   * pass would break hydration. The ETA window is resolved here too: it is
-   * derived from the clock, and reading `Date.now()` during render makes the
-   * displayed time drift on every re-render.
-   *
-   * One state object rather than three so this settles in a single commit.
-   */
-  const [state, setState] = useState<{ order: PlacedOrder | null; etaWindow: string | null; hydrated: boolean }>({
-    order: null,
-    etaWindow: null,
-    hydrated: false,
-  });
+  // Order lookup, webhook polling, the redirect result and clearing the basket
+  // all live in the hook, shared with the mobile screen.
+  const { orderRef, order, etaWindow, hydrated, waiting, unresolved, paymentFailed, refunded, isPast, isDelivery } = useConfirmation();
+
   const [accountOpen, setAccountOpen] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const etaWindowFor = (placed: PlacedOrder | null) => {
-      if (!placed || placed.etaLabel || placed.status) return null;
-      const fmt = (ms: number) => {
-        const d = new Date(ms);
-        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-      };
-      const now = Date.now();
-      return `${fmt(now + placed.etaLo * 60000)} – ${fmt(now + placed.etaHi * 60000)}`;
-    };
-
-    /*
-     * The order comes from the API, keyed by the reference in the URL, so this
-     * screen works for any order — one just placed, one opened from the order
-     * list, or a reloaded link. The session snapshot is only a first paint for
-     * the order just placed, so the page is not blank while the request runs.
-     */
-    const snapshot = getPlacedOrder(slug, orderRef);
-    setState({ order: snapshot, etaWindow: etaWindowFor(snapshot), hydrated: !orderRef });
-
-    if (!orderRef) return;
-    fetchPlacedOrder(orderRef)
-      .then((fetched) => {
-        if (cancelled) return;
-        const order = fetched ?? snapshot;
-        setState({ order, etaWindow: etaWindowFor(order), hydrated: true });
-      })
-      .catch(() => !cancelled && setState({ order: snapshot, etaWindow: etaWindowFor(snapshot), hydrated: true }));
-
-    return () => {
-      cancelled = true;
-    };
-  }, [slug, orderRef]);
-
-  const { order, etaWindow, hydrated } = state;
-
-  const isDelivery = order?.isDelivery ?? false;
-
-  // A viewed past order carries `status`; a freshly placed one does not.
-  const isPast = !!order?.status;
   const statusMeta = order?.status ? getStatusMeta(order.status, t) : null;
   const eta = order?.etaLabel ?? (isPast ? (statusMeta?.label ?? '—') : (etaWindow ?? '—'));
   const isScheduled = !isPast && !!order?.etaLabel;
@@ -106,6 +52,215 @@ export default function ConfirmationScreen() {
     );
   }
 
+  /*
+   * Stripe sent the customer back from PayPal or Klarna with a declined or
+   * abandoned payment. Nothing was ordered, so none of the receipt below
+   * applies — and rendering it anyway is what used to make a failed payment
+   * read as a success. The basket is untouched, so "try again" is a real offer.
+   */
+  if (paymentFailed) {
+    return (
+      <div className='min-h-screen bg-background text-foreground'>
+        <ShopHeaderMinimal onOpenAccount={() => setAccountOpen(true)} />
+        <div className='mx-auto max-w-[560px] px-4 pb-24 pt-16 md:px-8'>
+          <div className='rounded-[22px] border border-border bg-surface-1 p-8 text-center'>
+            <div className='mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-error-text/12'>
+              <AlertCircle className='h-6 w-6 text-error-text' strokeWidth={2.2} />
+            </div>
+            <h1 className='m-0 text-[22px] font-extrabold tracking-[-0.02em]'>
+              {t.paymentFailed ?? 'Payment failed'}
+            </h1>
+            <p className='mt-2.5 text-[14.5px] font-medium leading-relaxed text-muted-foreground'>
+              {t.paymentNotCompletedSub ?? 'Your payment was not completed, so no order has been placed. Your basket is still here.'}
+            </p>
+            <button
+              onClick={toCheckout}
+              className='mt-6 h-12 w-full rounded-2xl bg-primary px-6 text-sm font-extrabold text-selected-text transition active:scale-[0.98]'>
+              {t.tryAgain ?? 'Try again'}
+            </button>
+            <button onClick={toMenu} className='mt-2.5 h-11 w-full text-[13.5px] font-bold text-muted-foreground'>
+              {t.backToHome ?? 'Back to home'}
+            </button>
+          </div>
+        </div>
+        <UserDrawer open={accountOpen} onClose={() => setAccountOpen(false)} onOpenOrders={() => undefined} storeSlug={storeInfo?.slug} />
+      </div>
+    );
+  }
+
+  /*
+   * We waited and the order never appeared. Anything below this point renders a
+   * receipt from the session snapshot — which was written before the customer
+   * paid — so showing it here would tell someone their food was being prepared
+   * when nothing ever reached the kitchen. Give them the reference and a way to
+   * reach the restaurant instead.
+   */
+  if (unresolved) {
+    return (
+      <div className='min-h-screen bg-background text-foreground'>
+        <ShopHeaderMinimal onOpenAccount={() => setAccountOpen(true)} />
+        <div className='mx-auto max-w-[560px] px-4 pb-24 pt-16 md:px-8'>
+          <div className='rounded-[22px] border border-border bg-surface-1 p-8 text-center'>
+            <div className='mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-warning/12'>
+              <AlertCircle className='h-6 w-6 text-warning' strokeWidth={2.2} />
+            </div>
+            <h1 className='m-0 text-[22px] font-extrabold tracking-[-0.02em]'>
+              {t.orderNotConfirmed ?? 'We could not confirm your order'}
+            </h1>
+            <p className='mt-2.5 text-[14.5px] font-medium leading-relaxed text-muted-foreground'>
+              {t.orderNotConfirmedSub ?? 'Your payment may have gone through, but we have not been able to confirm the order. Please contact the restaurant with the reference below before ordering again.'}
+            </p>
+
+            <div className='mt-5 rounded-2xl border border-border bg-surface-2 px-4 py-3'>
+              <div className='text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground-2'>
+                {t.orderNumber ?? 'Order number'}
+              </div>
+              <div className='mt-1 font-mono text-[19px] font-bold tracking-[0.02em]'>{orderRef || '—'}</div>
+            </div>
+
+            {storeInfo?.phone && (
+              <a
+                href={`tel:${storeInfo.phone}`}
+                className='mt-5 flex h-12 w-full items-center justify-center rounded-2xl bg-primary px-6 text-sm font-extrabold text-selected-text transition active:scale-[0.98]'>
+                {t.callTheRestaurant ?? 'Call the restaurant'} · {storeInfo.phone}
+              </a>
+            )}
+            <button onClick={toMenu} className='mt-2.5 h-11 w-full text-[13.5px] font-bold text-muted-foreground'>
+              {t.backToHome ?? 'Back to home'}
+            </button>
+          </div>
+        </div>
+        <UserDrawer open={accountOpen} onClose={() => setAccountOpen(false)} onOpenOrders={() => undefined} storeSlug={storeInfo?.slug} />
+      </div>
+    );
+  }
+
+  /*
+   * The webhook has not turned the payment into an order yet.
+   *
+   * Its own screen rather than a badge on the receipt: everything below —
+   * the headline, the ETA, the empty-state card — is written to describe an
+   * order that exists, and dressing it with a "confirming" chip produced a page
+   * that said *Confirming payment*, *the kitchen is preparing your food* and
+   * *Order confirmed* all at once. Nothing here claims more than we know.
+   */
+  if (waiting) {
+    return (
+      <div className='min-h-screen bg-background text-foreground'>
+        <ShopHeaderMinimal onOpenAccount={() => setAccountOpen(true)} />
+        <div className='mx-auto max-w-[560px] px-4 pb-24 pt-16 md:px-8'>
+          <div className='rounded-[22px] border border-border bg-surface-1 p-8 text-center'>
+            <div className='mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-surface-2'>
+              <Loader2 className='h-6 w-6 animate-spin text-muted-foreground' />
+            </div>
+            <h1 className='m-0 text-[22px] font-extrabold tracking-[-0.02em]'>
+              {t.confirmingPayment ?? 'Confirming payment'}
+            </h1>
+            <p className='mt-2.5 text-[14.5px] font-medium leading-relaxed text-muted-foreground'>
+              {t.confirmingPaymentSub ?? 'This usually takes a few seconds. Please keep this page open.'}
+            </p>
+
+            {orderRef && (
+              <div className='mt-5 rounded-2xl border border-border bg-surface-2 px-4 py-3'>
+                <div className='text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground-2'>
+                  {t.orderNumber ?? 'Order number'}
+                </div>
+                <div className='mt-1 font-mono text-[19px] font-bold tracking-[0.02em]'>{orderRef}</div>
+              </div>
+            )}
+          </div>
+        </div>
+        <UserDrawer open={accountOpen} onClose={() => setAccountOpen(false)} onOpenOrders={() => undefined} storeSlug={storeInfo?.slug} />
+      </div>
+    );
+  }
+
+  /*
+   * Refunded. A full refund also cancels the order, so the receipt below — with
+   * its ETA and "the kitchen is preparing your food" — would describe something
+   * that is no longer happening.
+   */
+  if (refunded && order) {
+    return (
+      <div className='min-h-screen bg-background text-foreground'>
+        <ShopHeaderMinimal onOpenAccount={() => setAccountOpen(true)} />
+        <div className='mx-auto max-w-[560px] px-4 pb-24 pt-16 md:px-8'>
+          <div className='rounded-[22px] border border-border bg-surface-1 p-8 text-center'>
+            <div className='mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-warning/12'>
+              <CreditCard className='h-6 w-6 text-warning' strokeWidth={2.2} />
+            </div>
+            <h1 className='m-0 text-[22px] font-extrabold tracking-[-0.02em]'>
+              {t.orderRefunded ?? 'This order was refunded'}
+            </h1>
+            <p className='mt-2.5 text-[14.5px] font-medium leading-relaxed text-muted-foreground'>
+              {t.orderRefundedSub ?? 'The restaurant has refunded this order. Depending on your bank it can take a few days to appear.'}
+            </p>
+
+            <div className='mt-5 rounded-2xl border border-border bg-surface-2 px-4 py-3 text-left'>
+              <div className='flex items-center justify-between'>
+                <span className='text-[13px] font-semibold text-muted-foreground'>{t.orderNumber ?? 'Order number'}</span>
+                <span className='font-mono text-[15px] font-bold'>{orderRef || '—'}</span>
+              </div>
+              {order.amountRefunded != null && (
+                <div className='mt-2 flex items-center justify-between border-t border-border pt-2'>
+                  <span className='text-[13px] font-semibold text-muted-foreground'>{t.refunded ?? 'Refunded'}</span>
+                  <span className='text-[15px] font-extrabold'>{formatPrice(order.amountRefunded)}</span>
+                </div>
+              )}
+            </div>
+
+            <button onClick={toMenu} className='mt-6 h-12 w-full rounded-2xl bg-primary px-6 text-sm font-extrabold text-selected-text transition active:scale-[0.98]'>
+              {t.backToHome ?? 'Back to home'}
+            </button>
+          </div>
+        </div>
+        <UserDrawer open={accountOpen} onClose={() => setAccountOpen(false)} onOpenOrders={() => undefined} storeSlug={storeInfo?.slug} />
+      </div>
+    );
+  }
+
+  /*
+   * Nothing to show: the URL named no order, or named one we cannot find and
+   * were never waiting on. Reached by opening /confirmation directly. The
+   * receipt below dereferences `order` freely, so this guard is what keeps it
+   * safe — and the card that used to stand in for it said "Order confirmed",
+   * which was a claim about an order we knew nothing about.
+   */
+  if (!order) {
+    return (
+      <div className='min-h-screen bg-background text-foreground'>
+        <ShopHeaderMinimal onOpenAccount={() => setAccountOpen(true)} />
+        <div className='mx-auto max-w-[560px] px-4 pb-24 pt-16 md:px-8'>
+          <div className='rounded-[22px] border border-border bg-surface-1 p-8 text-center'>
+            <div className='mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-surface-2'>
+              <FileText className='h-6 w-6 text-muted-foreground' strokeWidth={2.2} />
+            </div>
+            <h1 className='m-0 text-[22px] font-extrabold tracking-[-0.02em]'>
+              {t.orderNotFound ?? 'Order not found'}
+            </h1>
+            <p className='mt-2.5 text-[14.5px] font-medium leading-relaxed text-muted-foreground'>
+              {t.orderNotFoundSub ?? 'We could not find an order for this link.'}
+            </p>
+            {orderRef && (
+              <div className='mt-5 rounded-2xl border border-border bg-surface-2 px-4 py-3'>
+                <div className='text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground-2'>
+                  {t.orderNumber ?? 'Order number'}
+                </div>
+                <div className='mt-1 font-mono text-[19px] font-bold tracking-[0.02em]'>{orderRef}</div>
+              </div>
+            )}
+            <button
+              onClick={toMenu}
+              className='mt-6 h-12 w-full rounded-2xl bg-primary px-6 text-sm font-extrabold text-selected-text transition active:scale-[0.98]'>
+              {t.backToHome ?? 'Back to home'}
+            </button>
+          </div>
+        </div>
+        <UserDrawer open={accountOpen} onClose={() => setAccountOpen(false)} onOpenOrders={() => undefined} storeSlug={storeInfo?.slug} />
+      </div>
+    );
+  }
+
   return (
     <div className='min-h-screen bg-background text-foreground'>
       <ShopHeaderMinimal onOpenAccount={() => setAccountOpen(true)} />
@@ -123,6 +278,7 @@ export default function ConfirmationScreen() {
         */}
         <div className='mb-[30px] flex flex-col items-start justify-between gap-[18px] border-b border-border pb-[26px] min-[641px]:flex-row min-[641px]:gap-6'>
           <div className='min-w-0'>
+            {/* Reaching here means the order exists, so this can state it plainly. */}
             <div className='inline-flex items-center gap-2 rounded-lg border border-success/30 bg-success/12 px-[11px] py-[5px]'>
               <span className='h-1.5 w-1.5 rounded-full bg-success' />
               <span className='text-[11.5px] font-extrabold uppercase tracking-[0.06em] text-[#7fd083]'>
@@ -147,19 +303,7 @@ export default function ConfirmationScreen() {
           </div>
         </div>
 
-        {!order ? (
-          <div className='rounded-2xl border border-border bg-surface-1 p-8 text-center'>
-            <div className='text-lg font-extrabold'>{t.orderConfirmed ?? 'Order confirmed'}</div>
-            {orderRef && (
-              <div className='mt-2 text-sm text-muted-foreground'>
-                {t.orderNumber ?? 'Order number'}: <span className='font-extrabold text-white'>{orderRef}</span>
-              </div>
-            )}
-            <button onClick={toMenu} className='mt-5 h-12 rounded-2xl bg-primary px-6 text-sm font-extrabold text-selected-text'>
-              {t.backToHome ?? 'Back to home'}
-            </button>
-          </div>
-        ) : (
+        {/* Past this point `order` is guaranteed — see the guard above. */}
           <div className='grid grid-cols-1 items-start gap-5 lg:grid-cols-[1.5fr_1fr]'>
             {/* LEFT — tracking */}
             <div className='flex flex-col gap-4'>
@@ -226,7 +370,7 @@ export default function ConfirmationScreen() {
                   <CreditCard className='h-5 w-5 shrink-0 text-muted-foreground' />
                   <div className='min-w-0'>
                     <div className='text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground'>{t.payment ?? 'Payment'}</div>
-                    <div className='mt-0.5 text-[13px] font-semibold'>{order.paymentName}</div>
+                    <div className='mt-0.5 text-[13px] font-semibold'>{serverPaymentMethodLabel(order.paymentName, t)}</div>
                   </div>
                 </div>
               </div>
@@ -266,7 +410,6 @@ export default function ConfirmationScreen() {
               </button>
             </div>
           </div>
-        )}
       </div>
 
       <UserDrawer open={accountOpen} onClose={() => setAccountOpen(false)} onOpenOrders={() => undefined} storeSlug={storeInfo?.slug} />

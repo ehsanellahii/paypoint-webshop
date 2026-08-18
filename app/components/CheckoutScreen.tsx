@@ -12,7 +12,7 @@ import { buildStaticMap } from '~/lib/staticMap';
 import RouteMap from '~/components/checkout/RouteMap';
 import ShopHeaderMinimal from '~/components/menu/ShopHeaderMinimal';
 import StripePaymentSheet from '~/components/checkout/StripePaymentSheet';
-import AuthenticationDialog from '~/components/dialogs/Authentication/AuthenticationDialog';
+import PhoneVerifyDialog from '~/components/checkout/PhoneVerifyDialog';
 import UserDrawer from '~/components/Header/UserDrawer';
 
 import DeliveryAddressModal from '~/components/dialogs/DeliveryAddressModal';
@@ -68,7 +68,7 @@ export default function CheckoutScreen() {
     isDineIn, isDelivery, isPickup,
     deliveryCharges, deliveryTime, priorityCharge, priorityTime, priorityAvailable,
     priorityFee, grandTotal, isScheduled,
-    phoneNumber, setPhoneNumber,
+    customerName, phoneNumber, setPhoneNumber,
     bellName, setBellName, driverNote, setDriverNote,
     timing, scheduledSlot, chooseTiming, confirmSchedule,
     paymentMethod, setPaymentMethod, tip, setTip,
@@ -459,11 +459,10 @@ export default function CheckoutScreen() {
       )}
 
       {/*
-        Verification gate. `AuthenticationDialog` already picks the right
-        presentation — a split-panel dialog on desktop, a full screen on a
-        phone — so the checkout does not need its own copy of either.
+        Verification gate: its own dialog, seeded with the number already typed
+        above, rather than the sign-in menu.
       */}
-      <AuthenticationDialog isOpen={verifyOpen} handleOpenChange={setVerifyOpen} />
+      <PhoneVerifyDialog open={verifyOpen} onClose={() => setVerifyOpen(false)} phone={phoneNumber} name={customerName} />
 
       <VoucherFlash />
 

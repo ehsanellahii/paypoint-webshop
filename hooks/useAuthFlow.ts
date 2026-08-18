@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLanguage } from '~/contexts/language-context';
+import { splitPhone } from '~/lib/phone';
 
-import { loginSchema, registrationSchema, RegistrationFormValues, type LoginFormValues } from '~/components/dialogs/Authentication/auth.schema';
+import { loginSchema, phoneSchema, registrationSchema, RegistrationFormValues, type LoginFormValues } from '~/components/dialogs/Authentication/auth.schema';
 import { z } from 'zod';
 
 
@@ -85,19 +86,37 @@ const otpSchema = z.object({
  * Mobile shows this as a full screen and desktop as a split-panel card, but
  * neither should own a second copy of the Firebase handling or the mock bypass.
  */
-export function useAuthFlow({ handleOpenChange, isRegistration = false }: { handleOpenChange: (open: boolean) => void; isRegistration?: boolean }) {
+export function useAuthFlow({
+  handleOpenChange,
+  isRegistration = false,
+  initialPhone,
+  initialName,
+  phoneOnly = false,
+}: {
+  handleOpenChange: (open: boolean) => void;
+  isRegistration?: boolean;
+  /**
+   * Seed the phone field — checkout already asked for the number, so the
+   * verification step should not ask for it a second time.
+   */
+  initialPhone?: string;
+  /** Seed the name, so the account still gets one without a second field. */
+  initialName?: string;
+  /** Validate the number alone: no name field is on screen to fill in. */
+  phoneOnly?: boolean;
+}) {
   const { t } = useLanguage();
   const storeInfo = useStore();
   const { setUser } = useUser();
   const adminId = storeInfo?.adminId || '';
   const storeId = storeInfo?.storeId || '';
+  const apiKey = storeInfo?.apiKey || '';
   const [step, setStep] = useState<Step>('details');
   const [disabled, setDisabled] = useState(false);
 
-  const [formData, setFormData] = useState<LoginFormValues | RegistrationFormValues>({
-    customerName: '',
-    phoneCode: '+49',
-    phoneNumber: '',
+  const [formData, setFormData] = useState<LoginFormValues | RegistrationFormValues>(() => {
+    const seeded = splitPhone(initialPhone);
+    return { customerName: initialName?.trim() ?? '', phoneCode: seeded.code, phoneNumber: seeded.number };
   });
 
   const [detailsErrors, setDetailsErrors] = useState<DetailsErrors>({});
@@ -141,10 +160,11 @@ export function useAuthFlow({ handleOpenChange, isRegistration = false }: { hand
   };
 
   const validateDetails = () => {
-    const result = isRegistration ? registrationSchema.safeParse(formData) : loginSchema.safeParse(formData);
+    const schema = phoneOnly ? phoneSchema : isRegistration ? registrationSchema : loginSchema;
+    const result = schema.safeParse(formData);
     if (result.success) {
       setDetailsErrors({});
-      return { ok: true as const, data: result.data };
+      return { ok: true as const };
     }
     const next: DetailsErrors = {};
     for (const issue of result.error.issues) {
@@ -230,9 +250,9 @@ export function useAuthFlow({ handleOpenChange, isRegistration = false }: { hand
       // const idToken = await cred.user.getIdToken();
       let user = null;
       if (isRegistration) {
-        user = await registerUser(adminId, storeId, (formData as RegistrationFormValues).customerName.trim(), normalizedPhone);
+        user = await registerUser(adminId, storeId, apiKey, (formData as RegistrationFormValues).customerName.trim(), normalizedPhone);
       } else {
-        user = await loginUser(adminId, storeId, normalizedPhone, formData.customerName?.trim());
+        user = await loginUser(adminId, storeId, apiKey, normalizedPhone, formData.customerName?.trim());
       }
       handleOpenChange(false);
       if (user) setUser(user);
@@ -240,7 +260,7 @@ export function useAuthFlow({ handleOpenChange, isRegistration = false }: { hand
         const slug = storeInfo?.slug; // IMPORTANT: use same key you store favorites under
         const localIds = getFavoriteIds(slug!);
 
-        const res = await syncFavorites(adminId, storeId, user._id, localIds);
+        const res = await syncFavorites(adminId, storeId, apiKey, user._id, localIds);
 
         const finalIds: string[] = res?.productIds ?? [];
         setFavoritesFromIds(slug!, finalIds);
@@ -278,7 +298,7 @@ export function useAuthFlow({ handleOpenChange, isRegistration = false }: { hand
     try {
       const slug = storeInfo?.slug;
       const localIds = getFavoriteIds(slug!);
-      const res = await syncFavorites(adminId, storeId, user._id, localIds);
+      const res = await syncFavorites(adminId, storeId, apiKey, user._id, localIds);
       setFavoritesFromIds(slug!, res?.productIds ?? []);
     } catch (e) {
       console.error('Favorites sync after auth failed:', e);
@@ -307,7 +327,7 @@ export function useAuthFlow({ handleOpenChange, isRegistration = false }: { hand
         return;
       }
 
-      const user = await loginUserWithProvider(adminId, storeId, {
+      const user = await loginUserWithProvider(adminId, storeId, apiKey, {
         email,
         name: credential.user.displayName ?? undefined,
         provider: providerName,

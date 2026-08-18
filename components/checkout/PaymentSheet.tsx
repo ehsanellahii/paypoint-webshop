@@ -17,10 +17,10 @@ import { useAddress } from '~/contexts/address-context';
  * `card` is the in-store EC/girocard reader, kept under that name because the
  * order payload has always mapped it to `ec-card reader`.
  */
-export type PaymentMethod = 'cash' | 'card' | 'applePay' | 'paypal' | 'klarna';
+export type PaymentMethod = 'cash' | 'card' | 'cardWallets' | 'paypal' | 'klarna';
 
-/** Every method the design draws. */
-type MethodId = 'creditCard' | PaymentMethod;
+/** Every row the sheet can draw. */
+type MethodId = PaymentMethod;
 
 /**
  * Client id → the value the order endpoint stores. The server enum also has
@@ -28,8 +28,9 @@ type MethodId = 'creditCard' | PaymentMethod;
  */
 export const ORDER_PAYMENT_METHOD: Record<PaymentMethod, string> = {
   cash: 'cash',
+  // The terminal at the counter or the door, not an online card.
   card: 'ec-card reader',
-  applePay: 'applePay',
+  cardWallets: 'card',
   paypal: 'paypal',
   klarna: 'klarna',
 };
@@ -45,16 +46,18 @@ type Props = {
 /* Drawn rather than imported: these are the payment networks' own wordmarks,
    sized to the design's 46×32 tile. */
 
-const VisaMark = () => <span className='text-[11px] font-black italic tracking-[0.02em] text-[#1a1f71]'>VISA</span>;
-
-const ApplePayMark = () => (
-  <span className='flex items-center gap-px'>
-    <svg width='13' height='15' viewBox='0 0 22 26' fill='#000' aria-hidden>
-      <path d='M15.3 13.6c0-2 1.6-2.9 1.7-3-1-1.4-2.4-1.6-2.9-1.6-1.2-.1-2.4.7-3 .7-.6 0-1.6-.7-2.6-.7-1.3 0-2.6.8-3.2 2-1.4 2.4-.4 6 1 7.9.7.9 1.4 2 2.5 1.9 1-.04 1.4-.6 2.6-.6s1.5.6 2.6.6 1.7-.9 2.4-1.8c.7-1 1-2 1-2.1-.1 0-1.9-.7-1.9-2.8zM13.4 7.5c.5-.7.9-1.6.8-2.5-.8 0-1.7.5-2.3 1.2-.5.6-.9 1.5-.8 2.4.9.1 1.7-.4 2.3-1.1z' />
-    </svg>
-    <span className='text-[12.5px] font-bold text-black'>Pay</span>
-  </span>
+/* Cards and wallets share one row, so the tile shows a card rather than any
+   single brand — which of them the customer actually gets is Stripe's call. */
+const CardsMark = () => (
+  <svg width='22' height='16' viewBox='0 0 24 17' fill='none' aria-hidden>
+    <rect x='0.75' y='0.75' width='22.5' height='15.5' rx='2.5' fill='#1a1f71' />
+    <rect x='0.75' y='4' width='22.5' height='3' fill='#0f1348' />
+    <rect x='3' y='10.5' width='7' height='2' rx='1' fill='#ffffff' opacity='0.85' />
+    <circle cx='17' cy='11.5' r='2.6' fill='#eb001b' opacity='0.9' />
+    <circle cx='19.6' cy='11.5' r='2.6' fill='#f79e1b' opacity='0.9' />
+  </svg>
 );
+
 
 const CashMark = () => (
   <svg width='22' height='18' viewBox='0 0 24 20' fill='none' stroke='#2e9e5b' strokeWidth={1.8} aria-hidden>
@@ -91,8 +94,7 @@ type MethodSpec = {
  * Apple Pay, cash, EC/girocard, PayPal, Klarna.
  */
 const METHODS: MethodSpec[] = [
-  { id: 'creditCard', method: null, mark: <VisaMark />, tileClass: 'bg-white', group: 'cards' },
-  { id: 'applePay', method: 'applePay', mark: <ApplePayMark />, tileClass: 'bg-white', group: 'other' },
+  { id: 'cardWallets', method: 'cardWallets', mark: <CardsMark />, tileClass: 'bg-white', group: 'cards' },
   { id: 'cash', method: 'cash', mark: <CashMark />, tileClass: 'bg-white', group: 'other' },
   { id: 'card', method: 'card', mark: <EcMark />, tileClass: 'bg-white', group: 'other' },
   { id: 'paypal', method: 'paypal', mark: <PaypalMark />, tileClass: 'bg-white', group: 'other' },
@@ -105,13 +107,44 @@ export function paymentMethodLabel(m: PaymentMethod, t: any): string {
     case 'cash':
       return t.cash;
     case 'card':
-      return t.posCardPayment;
+      return t.ecCard ?? 'EC card';
+    case 'cardWallets':
+      return t.cardAndWallets ?? 'Card & wallets';
+    case 'paypal':
+      return 'PayPal';
+    case 'klarna':
+      return 'Klarna';
+  }
+}
+
+/**
+ * The label for a payment method as the **server** records it.
+ *
+ * Orders store the server's enum (`ec-card reader`, `applePay`), not the id the
+ * sheet uses, so a screen reading an order back needs this rather than
+ * `paymentMethodLabel` above. Brand names are deliberately not translated —
+ * Klarna is Klarna in every language.
+ */
+export function serverPaymentMethodLabel(value: string | undefined, t: any): string {
+  switch (value) {
+    case 'cash':
+      return t.cash;
+    case 'ec-card reader':
+      return t.ecCard ?? 'EC card';
+    case 'card':
+      return t.cardAndWallets ?? 'Card & wallets';
+    // Orders placed before cards and wallets shared a row.
     case 'applePay':
       return 'Apple Pay';
     case 'paypal':
       return 'PayPal';
     case 'klarna':
       return 'Klarna';
+    case 'stripe':
+    case 'online':
+      return t.onlinePayment;
+    default:
+      return value ?? '';
   }
 }
 
@@ -121,8 +154,8 @@ export function paymentMethodSub(m: PaymentMethod, t: any, isDelivery: boolean):
     case 'cash':
     case 'card':
       return isDelivery ? t.onDelivery : t.onPickup;
-    case 'applePay':
-      return 'iPhone';
+    case 'cardWallets':
+      return t.cardAndWalletsSub ?? 'Visa, Mastercard, Apple Pay, Google Pay';
     case 'paypal':
       return t.onlinePayment;
     case 'klarna':
@@ -144,34 +177,52 @@ export default function PaymentSheet({ open, onClose, value, onSelect }: Props) 
    * cannot take. Adding a method later is a line in this map plus backend
    * support — not a redesign.
    */
+
+  /*
+   * Every online method depends on the same thing: Stripe willing to take a
+   * charge on this restaurant's connected account. Showing them regardless
+   * meant a store with no Stripe link still offered PayPal, reserved an order,
+   * and only then failed with "this store cannot take online payments yet" —
+   * after the customer had committed.
+   */
+  const canPayOnline = !!storeInfo?.stripeChargesEnabled;
+
   const enabled: Record<MethodId, boolean> = {
-    // No card row: cards belong to Stripe, so this list can only mirror it.
-    creditCard: false,
     // Cash and the EC reader are the two the store payload actually toggles.
     cash: !!storeInfo?.settings?.paymentMethods?.cash,
     card: !!storeInfo?.settings?.paymentMethods?.ecCardReader,
     /*
-     * The store payload has no flag for these three, so they are shown for
-     * every store. The order endpoint accepts the values, but nothing charges
-     * yet — see the note on ORDER_PAYMENT_METHOD.
+     * The store payload carries no per-method flag for these, so they stand or
+     * fall together with the connected account. Which of them the customer
+     * actually sees is then Stripe's decision, not ours: the payment sheet
+     * renders whatever the account has enabled.
      */
-    applePay: true,
-    paypal: true,
-    klarna: true,
+    /*
+     * One row for cards and wallets, rather than a row per wallet.
+     *
+     * The sheet cannot know what the customer's device supports — Apple Pay
+     * only appears on Safari with a card configured, Google Pay only on
+     * Chrome/Android — so naming them here meant an Android customer had to
+     * choose "Apple Pay" to reach the card form. Stripe's element already
+     * offers exactly what the device and the connected account support, so
+     * this row hands the decision to it.
+     */
+    cardWallets: canPayOnline,
+    paypal: canPayOnline,
+    klarna: canPayOnline,
   };
 
   const label: Record<MethodId, string> = {
-    creditCard: t.posCardPayment,
-    applePay: 'Apple Pay',
+    cardWallets: t.cardAndWallets ?? 'Card & wallets',
     cash: t.cash,
-    card: t.posCardPayment,
+    // Distinct from the online card row above — this one is the terminal.
+    card: t.ecCard ?? 'EC card',
     paypal: 'PayPal',
     klarna: 'Klarna',
   };
 
   const sub: Record<MethodId, string> = {
-    creditCard: 'Visa',
-    applePay: 'iPhone',
+    cardWallets: t.cardAndWalletsSub ?? 'Visa, Mastercard, Apple Pay, Google Pay',
     paypal: t.onlinePayment,
     klarna: t.invoiceOrInstalments,
     cash: isDelivery ? t.onDelivery : t.onPickup,

@@ -10,7 +10,7 @@ import { useUser } from '~/contexts/user-context';
 import { useLanguage } from '~/contexts/language-context';
 import { useStoreNavigation } from '~/hooks/useStoreNavigation';
 
-import { API_BASE_URL, X_API_KEY, createPaymentIntent, createUnconfirmedOrder, formatPrice } from '~/lib/api';
+import { API_BASE_URL, apiHeaders, createPaymentIntent, createUnconfirmedOrder, formatPrice } from '~/lib/api';
 import { formatCartItemsForOrder, getImageURL, getPostalRateInfo, storage } from '~/lib/utils';
 import type { PreorderSlot } from '~/components/menu/PreorderModal';
 import { ORDER_PAYMENT_METHOD, type PaymentMethod } from '~/components/checkout/PaymentSheet';
@@ -31,18 +31,34 @@ export const TIP_VALUES = [0, 1, 2, 3];
  * twice, or the two will drift and only one will be tested.
  */
 /*
- * Checkout no longer collects a name, but `customer.name` is `required: true`
- * on the server and its login service throws without one. These customers show
- * as this placeholder in the POS order list, the admin customer list and on
- * receipts.
+ * Checkout collects no name, but `customer.name` is `required: true` on the
+ * server and its login service throws without one — so something has to be
+ * sent. Only used when we genuinely have nothing better.
  */
 const CUSTOMER_NAME_PLACEHOLDER = '********';
+
+/** Any run of asterisks: ours, or the shorter one the HubRise import uses. */
+const isPlaceholderName = (name?: string | null) =>
+  !name || /^\*+$/.test(name.trim());
+
+/**
+ * The name to put on an order.
+ *
+ * The customer has verified before this runs, so a registered one already has
+ * their real name on the account — sending the placeholder anyway threw that
+ * away and put asterisks on the receipt, the POS ticket and the admin customer
+ * list. The placeholder is now the fallback it was meant to be.
+ */
+const resolveCustomerName = (accountName?: string | null) =>
+  isPlaceholderName(accountName)
+    ? CUSTOMER_NAME_PLACEHOLDER
+    : (accountName as string).trim();
 
 /**
  * Methods settled online, before the order is placed. Cash and the EC reader
  * are collected in person, so those orders go straight through as before.
  */
-const ONLINE_METHODS = new Set<PaymentMethod>(['applePay', 'paypal', 'klarna']);
+const ONLINE_METHODS = new Set<PaymentMethod>(['cardWallets', 'paypal', 'klarna']);
 
 export function useCheckout() {
   const { t } = useLanguage();
@@ -82,17 +98,22 @@ export function useCheckout() {
   const [voucherOpen, setVoucherOpen] = useState(false);
   const [preorderOpen, setPreorderOpen] = useState(false);
 
+  /** Set once the prefill below has run, so the save effect cannot beat it. */
+  const restored = useRef(false);
+
   const [touched, setTouched] = useState(false);
   const [placing, setPlacing] = useState(false);
   /** Set once Stripe has something to charge; drives the payment sheet. */
   const [payNow, setPayNow] = useState<{ clientSecret: string; stripeAccountId: string; amount: number; orderId: string } | null>(null);
   /*
-   * Opens the sign-in flow when an unverified customer tries to order. The
-   * order is not abandoned — `placeOrder` runs again by itself once the
-   * customer comes back verified, so they press the button once, not twice.
+   * Opens the sign-in flow when an unverified customer tries to order.
+   *
+   * Verification is its own errand: the flow closes when the customer is
+   * verified and leaves them back on the filled-in checkout to press the button
+   * themselves. An order that submits itself after a dialog closes is a
+   * surprising thing for a payment screen to do.
    */
   const [verifyOpen, setVerifyOpen] = useState(false);
-  const resumeAfterVerify = useRef(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Prefill from the last order, and pick up a pre-order slot chosen on the menu.
@@ -101,6 +122,7 @@ export function useCheckout() {
     if (saved.customerName) setCustomerName(saved.customerName);
     if (saved.email) setEmail(saved.email);
     if (saved.phoneNumber) setPhoneNumber(saved.phoneNumber);
+    restored.current = true;
 
     const menuSlot = getPreorderSlot(slug);
     if (menuSlot) {
@@ -108,6 +130,21 @@ export function useCheckout() {
       setTiming('scheduled');
     }
   }, [slug]);
+
+  /*
+   * Keep the contact details as they are typed.
+   *
+   * They used to be written only after an order went through, so anything that
+   * took the customer away from a half-filled form — verifying their number, a
+   * reload, closing the tab — lost the lot. Written on every change instead,
+   * guarded so the first render cannot blank the store before the prefill above
+   * has restored it.
+   */
+  useEffect(() => {
+    if (!restored.current) return;
+    if (!customerName.trim() && !email.trim() && !phoneNumber.trim()) return;
+    storage.set(STORAGE_KEY, { customerName: customerName.trim(), email: email.trim(), phoneNumber: phoneNumber.trim() });
+  }, [customerName, email, phoneNumber]);
 
   // An empty cart has nothing to check out.
   useEffect(() => {
@@ -170,15 +207,29 @@ export function useCheckout() {
     if (isDineIn) return null;
 
     /*
-     * `customer.name` is `required: true` on the server, but the delivery form
-     * has no name field — so it sends a placeholder. Consequence worth knowing:
-     * these customers appear as the placeholder in the POS order list, the
-     * admin customer list and on receipts.
+     * Identity for the lookup, which is not the same thing as the contact
+     * number on the order.
+     *
+     * The OTP flow registers the customer under the E.164 number it sent the
+     * code to (`+4915112345678`). This field is free text and people type the
+     * national form (`015112345678`). The server matches on the string after
+     * stripping only spaces and dashes, so sending the typed value found no
+     * match, created a *second* customer record, and the response — from
+     * `/login`, which never raises `isVerified` — overwrote the verified
+     * session with an unverified one. The next order then asked for the OTP
+     * again, forever.
+     *
+     * So once the account is verified, it identifies itself by the number it
+     * was verified under. The typed number still goes on the order below as
+     * the contact number.
      */
+    const identityPhone = user?.isVerified && user?.phoneNumber ? user.phoneNumber.trim() : phoneNumber.trim();
+
     const payload: any = {
       email: email.trim(),
-      phoneNumber: phoneNumber.trim(),
-      name: CUSTOMER_NAME_PLACEHOLDER,
+      phoneNumber: identityPhone,
+      // The account's own name when it has one; the placeholder only otherwise.
+      name: resolveCustomerName(user?.name),
       signInWith: 'phone',
       signInSource: 'web',
     };
@@ -194,12 +245,17 @@ export function useCheckout() {
 
     const res = await fetch(`${API_BASE_URL}/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': X_API_KEY },
+      headers: apiHeaders({ apiKey: storeInfo?.apiKey }),
       body: JSON.stringify(payload),
     });
     const json = await res.json();
     if (!res.ok) throw new Error(json?.message || t.loginFailed || 'Login failed');
-    if (json?.data) setUser(json.data);
+    /*
+     * `/login` cannot confirm verification — only `/user/login`, behind the OTP,
+     * does — so it must never be able to take it away either. Belt and braces
+     * next to the identity fix above.
+     */
+    if (json?.data) setUser({ ...json.data, isVerified: json.data?.isVerified || user?.isVerified });
     return json?.data;
   };
 
@@ -214,7 +270,6 @@ export function useCheckout() {
      * number or email before an order is created.
      */
     if (!isDineIn && !user?.isVerified) {
-      resumeAfterVerify.current = true;
       setVerifyOpen(true);
       return;
     }
@@ -230,7 +285,16 @@ export function useCheckout() {
         storeId: storeInfo?.storeId || '',
         orderType: isDineIn ? 'dineIn' : orderType,
         paymentMethod: paymentMethod ? ORDER_PAYMENT_METHOD[paymentMethod] : 'cash',
-        customerDetails: isDineIn ? {} : { name: CUSTOMER_NAME_PLACEHOLDER, email: email.trim(), phoneNumber: phoneNumber.trim() },
+        customerDetails: isDineIn
+          ? {}
+          : {
+              // `customer` is what login just returned, so it is the freshest
+              // view of the account; `user` covers the case where login was
+              // skipped. Dine-in carries no customer at all.
+              name: resolveCustomerName(customer?.name ?? user?.name),
+              email: email.trim(),
+              phoneNumber: phoneNumber.trim(),
+            },
         items: formatCartItemsForOrder(cart),
         totalOrderPrice: grandTotal,
         totalItems,
@@ -305,22 +369,70 @@ export function useCheckout() {
       }
 
       /*
+       * Everything the confirmation screen needs to paint before the API
+       * answers. Shared by both branches: the online one has to write it too,
+       * or a customer coming back from Stripe lands on an empty screen while
+       * the order is fetched — and on mobile, on nothing at all.
+       */
+      const rememberOrder = (orderRef: string, paymentName: string) => {
+        storage.set(STORAGE_KEY, { customerName: customerName.trim(), email: email.trim(), phoneNumber: phoneNumber.trim() });
+        savePlacedOrder(slug, {
+          orderRef,
+          isDelivery,
+          paymentName,
+          total: grandTotal,
+          etaLo: isDelivery ? (timing === 'priority' ? Math.max(1, priorityTime) : Math.max(1, deliveryTime)) : 5,
+          etaHi: isDelivery ? (timing === 'priority' ? Math.max(1, priorityTime) + 10 : Math.max(1, deliveryTime) + 10) : 15,
+          etaLabel,
+          addressLine: isDelivery ? (deliveryAddress?.formattedAddress ?? '') : `${storeInfo?.brandName ?? ''} · ${storeInfo?.address ?? ''}`,
+          items: cart.map((i) => ({
+            name: i.product.name,
+            qty: i.quantity,
+            lineTotal: i.product.currentPrice * i.quantity,
+            image: i.product.images?.length ? getImageURL(i.product.images[0]) : '',
+          })),
+          placedAt: Date.now(),
+        });
+      };
+
+      /*
        * An online method reserves the order instead of placing it: the basket is
        * held server-side, Stripe charges against that reservation, and the
        * webhook turns it into a real order once the money lands. Placing it
        * first would leave the kitchen cooking for a payment that may never come.
        */
       if (paymentMethod && ONLINE_METHODS.has(paymentMethod)) {
-        const reserved: any = await createUnconfirmedOrder(storeInfo?.adminId || '', storeInfo?.storeId || '', orderData);
+        const reserved: any = await createUnconfirmedOrder(storeInfo?.adminId || '', storeInfo?.storeId || '', storeInfo?.apiKey || '', orderData);
         const reservedId = reserved?.id || reserved?._id;
         if (!reservedId) throw new Error('Could not reserve the order');
 
+        /*
+         * The short code the customer quotes, not the internal id. The order
+         * endpoint accepts either, so this is what travels in the confirmation
+         * URL and onto the screen — a Mongo ObjectId is meaningless to someone
+         * ringing the restaurant about their food.
+         */
+        const orderRef = String(reserved?.collectionCode || reservedId);
+
         const intent = await createPaymentIntent(String(reservedId), customer?._id, paymentMethod);
+
+        /*
+         * Remembered, but the cart is deliberately left alone. The customer can
+         * still dismiss the Stripe sheet or have the payment declined, and
+         * emptying their basket at that point would lose an order they are
+         * still trying to place. The confirmation screen clears it once the
+         * order is known to exist.
+         */
+        // The server's enum, matching what `fetchPlacedOrder` reads back off an
+        // order — the screens translate it. Storing a display label here made the
+        // snapshot and the fetched order disagree about the same payment.
+        rememberOrder(orderRef, ORDER_PAYMENT_METHOD[paymentMethod]);
+
         setPayNow({
           clientSecret: intent.client_secret,
           stripeAccountId: intent.stripe_account_id,
           amount: intent.amount,
-          orderId: String(reservedId),
+          orderId: orderRef,
         });
         setPlacing(false);
         return;
@@ -338,25 +450,8 @@ export function useCheckout() {
       const result = await res.json();
       const orderRef = result?.data?.collectionCode || result?.data?.id || '';
 
-      storage.set(STORAGE_KEY, { customerName: customerName.trim(), email: email.trim(), phoneNumber: phoneNumber.trim() });
-
-      savePlacedOrder(slug, {
-        orderRef,
-        isDelivery,
-        paymentName: paymentMethod === 'card' ? t.posCardPayment : t.cash,
-        total: grandTotal,
-        etaLo: isDelivery ? (timing === 'priority' ? Math.max(1, priorityTime) : Math.max(1, deliveryTime)) : 5,
-        etaHi: isDelivery ? (timing === 'priority' ? Math.max(1, priorityTime) + 10 : Math.max(1, deliveryTime) + 10) : 15,
-        etaLabel,
-        addressLine: isDelivery ? (deliveryAddress?.formattedAddress ?? '') : `${storeInfo?.brandName ?? ''} · ${storeInfo?.address ?? ''}`,
-        items: cart.map((i) => ({
-          name: i.product.name,
-          qty: i.quantity,
-          lineTotal: i.product.currentPrice * i.quantity,
-          image: i.product.images?.length ? getImageURL(i.product.images[0]) : '',
-        })),
-        placedAt: Date.now(),
-      });
+      // Settled in person, so this one is final the moment the API answers.
+      rememberOrder(orderRef, paymentMethod ? ORDER_PAYMENT_METHOD[paymentMethod] : 'cash');
 
       clearCart();
       clearPreorderSlot(slug);
@@ -384,17 +479,9 @@ export function useCheckout() {
     savePreorderSlot(slug, slot);
   };
 
-  /*
-   * The customer verified and came back: finish the order they already asked
-   * for. Keyed on the flag rather than on the sheet closing, so dismissing the
-   * dialog without verifying does nothing.
-   */
+  // Verification closes its own flow; nothing here resumes the order.
   useEffect(() => {
-    if (!resumeAfterVerify.current || !user?.isVerified) return;
-    resumeAfterVerify.current = false;
-    setVerifyOpen(false);
-    void placeOrder();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (user?.isVerified) setVerifyOpen(false);
   }, [user?.isVerified]);
 
   return {

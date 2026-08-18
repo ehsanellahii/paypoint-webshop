@@ -1,4 +1,4 @@
-import { API_BASE_URL, X_API_KEY } from '~/lib/api';
+import { API_BASE_URL, apiHeaders } from '~/lib/api';
 import { getImageURL } from '~/lib/utils';
 
 /**
@@ -18,6 +18,7 @@ export type PlacedOrderItem = {
 export type PlacedOrder = {
   orderRef: string;
   isDelivery: boolean;
+  /** The server's payment enum — screens translate it for display. */
   paymentName: string;
   total: number;
   etaLo: number;
@@ -27,6 +28,9 @@ export type PlacedOrder = {
   items: PlacedOrderItem[];
   /** Set when viewing a past order from history — drives the status display. */
   status?: string;
+  /** The payment was refunded. A full refund also cancels the order. */
+  refunded?: boolean;
+  amountRefunded?: number;
   placedAt: number;
 };
 
@@ -38,10 +42,10 @@ export type PlacedOrder = {
  * session that placed the order: opening one from the order list, or reloading
  * on another device, showed nothing.
  */
-export async function fetchPlacedOrder(orderRef: string): Promise<PlacedOrder | null> {
+export async function fetchPlacedOrder(orderRef: string, apiKey: string): Promise<PlacedOrder | null> {
   if (!orderRef) return null;
   const res = await fetch(`${API_BASE_URL}/order/${encodeURIComponent(orderRef)}`, {
-    headers: { 'Content-Type': 'application/json', 'x-api-key': X_API_KEY },
+    headers: apiHeaders({ apiKey }),
     cache: 'no-store',
   });
   if (!res.ok) return null;
@@ -68,6 +72,10 @@ export async function fetchPlacedOrder(orderRef: string): Promise<PlacedOrder | 
       image: it.image ? getImageURL(it.image) : '',
     })),
     status: o.status,
+    refunded:
+      o.payment?.status === 'refunded' ||
+      o.payment?.status === 'partiallyRefunded',
+    amountRefunded: o.payment?.amountRefunded,
     placedAt: o.orderDateTime ? new Date(o.orderDateTime).getTime() : Date.now(),
   };
 }

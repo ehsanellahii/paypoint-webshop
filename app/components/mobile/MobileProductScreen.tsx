@@ -32,7 +32,7 @@ export default function MobileProductScreen({ productId }: { productId: string }
 
   useEffect(() => {
     let cancelled = false;
-    fetchMenuData(storeInfo?.adminId, storeInfo?.storeId)
+    fetchMenuData(storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey)
       .then((data) => {
         if (cancelled) return;
         const found = getAllProducts(data).find((p) => String(p.id) === productId || String(p._id) === productId) ?? null;
@@ -42,7 +42,7 @@ export default function MobileProductScreen({ productId }: { productId: string }
     return () => {
       cancelled = true;
     };
-  }, [productId, storeInfo?.adminId, storeInfo?.storeId]);
+  }, [productId, storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey]);
 
   const groupTotal = (sectionId: string) => Object.values(selected[sectionId] ?? {}).reduce((a, b) => a + b, 0);
 

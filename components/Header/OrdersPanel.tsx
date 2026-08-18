@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useStoreNavigation } from '~/hooks/useStoreNavigation';
 import Image from 'next/image';
 import { ChevronDown, Loader2, Receipt, ChevronRight, ShoppingBag } from 'lucide-react';
-import { API_BASE_URL, formatPrice as apiFormatPrice, X_API_KEY } from '@/lib/api';
+import { API_BASE_URL, formatPrice as apiFormatPrice, apiHeaders } from '@/lib/api';
 import { cn, getImageURL, MenuProduct } from '~/lib/utils';
 import { useUser } from '~/contexts/user-context';
 import { useLanguage } from '@/contexts/language-context';
@@ -195,7 +195,7 @@ export default function OrdersPanel({
     setLoading(true);
     setErr(null);
     try {
-      const list = await fetchUserOrders(userId);
+      const list = await fetchUserOrders(userId, storeInfo?.apiKey || '');
       setOrders(list);
       onLoaded?.(list.length);
       // Auto-expand the most recent order in the full (dialog) view only.
@@ -444,10 +444,10 @@ function OrdersEmpty({ t, onBrowse }: { t: any; onBrowse?: () => void }) {
  * the same call — the integration API has no "one order by id" endpoint, so a
  * details view fetches the list and picks its order out of it.
  */
-export async function fetchUserOrders(userId: string): Promise<Order[]> {
+export async function fetchUserOrders(userId: string, apiKey: string): Promise<Order[]> {
   const res = await fetch(`${API_BASE_URL}/orders/${encodeURIComponent(userId)}`, {
     method: 'GET',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': X_API_KEY },
+    headers: apiHeaders({ apiKey }),
     cache: 'no-store',
   });
   if (!res.ok) {

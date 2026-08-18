@@ -6,7 +6,7 @@ import { FavoriteSnapshot, getFavorites, removeFavorites } from '~/lib/favorites
 import { MenuProduct } from '~/lib/utils';
 
 type ProductCard = MenuProduct;
-export function useResolvedFavorites(storeKey: string, enabled: boolean, storeId: string, adminId: string) {
+export function useResolvedFavorites(storeKey: string, enabled: boolean, storeId: string, adminId: string, apiKey: string) {
   const [favorites, setFavorites] = useState<FavoriteSnapshot[]>([]);
   const [products, setProducts] = useState<ProductCard[]>([]);
   const [loading, setLoading] = useState(false);
@@ -30,7 +30,7 @@ export function useResolvedFavorites(storeKey: string, enabled: boolean, storeId
     (async () => {
       setLoading(true);
       try {
-        const res = await resolveFavorites(adminId, storeId, ids); // pass adminId if needed
+        const res = await resolveFavorites(adminId, storeId, apiKey, ids);
 
         if (cancelled) return;
 
@@ -52,7 +52,7 @@ export function useResolvedFavorites(storeKey: string, enabled: boolean, storeId
     return () => {
       cancelled = true;
     };
-  }, [storeKey, enabled, ids, adminId, storeId]); // join keeps effect stable
+  }, [storeKey, enabled, ids, adminId, storeId, apiKey]); // join keeps effect stable
 
   return { favorites, setFavorites, products, loading };
 }

@@ -49,5 +49,26 @@ export const loginSchema = z
     }
   });
 
+/**
+ * The number on its own.
+ *
+ * Confirming a phone number does not need a name — the sign-in panel asks for
+ * one because the design shows the field, but the checkout's verification step
+ * has the name already and only wants to prove the number. Validating that step
+ * against `loginSchema` failed on the empty name and the send button did
+ * nothing at all.
+ */
+export const phoneSchema = z
+  .object({
+    phoneCode: z.string().regex(/^\+\d{1,4}$/, 'Invalid country code'),
+    phoneNumber: z.string().trim().regex(/^\d{6,15}$/, 'Phone number must be 6–15 digits'),
+  })
+  .superRefine((val, ctx) => {
+    const full = `${val.phoneCode}${val.phoneNumber}`;
+    if (!/^\+\d{7,16}$/.test(full)) {
+      ctx.addIssue({ code: 'custom', path: ['phoneNumber'], message: 'Invalid phone number format' });
+    }
+  });
+
 export type RegistrationFormValues = z.infer<typeof registrationSchema>;
 export type LoginFormValues = z.infer<typeof loginSchema>;

@@ -49,7 +49,7 @@ export default function MobileMenuScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchMenuData(storeInfo?.adminId, storeInfo?.storeId)
+    fetchMenuData(storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey)
       .then((data) => {
         if (cancelled) return;
         setMenuData(data);
@@ -60,7 +60,7 @@ export default function MobileMenuScreen() {
     return () => {
       cancelled = true;
     };
-  }, [storeInfo?.adminId, storeInfo?.storeId]);
+  }, [storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey]);
 
   const categories = menuData ? getCategories(menuData) : [];
   const q = query.trim().toLowerCase();

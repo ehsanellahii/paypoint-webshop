@@ -183,7 +183,6 @@ export interface Translation {
 export interface IStoreInfo {
   /** The firm name, joined from the admin's user record — not the store row. */
   brandName: string;
-  storeName: string;
   /**
    * Declaring a field here is not enough to make it available: `getStoreData`
    * maps the response through an allow-list, so anything added below must be
@@ -229,6 +228,15 @@ export interface IStoreInfo {
     paymentMethods: { cash: boolean; ecCardReader: boolean };
     orderTypes: { dineIn: boolean; takeaway: boolean; delivery: boolean };
   } | null;
+  /**
+   * Whether Stripe will accept a charge on this store's connected account.
+   *
+   * Mirrors `charges_enabled` on the restaurant's own Stripe account, which the
+   * server keeps current from the Connect webhook. False covers both "never
+   * connected" and "connected but onboarding unfinished" — from the
+   * storefront's side those are the same thing: no online payment.
+   */
+  stripeChargesEnabled?: boolean;
   coordinates: { latitude: number; longitude: number } | null;
   adminGoogleApiKey: string;
   posGoogleApiKey: string;
@@ -243,6 +251,14 @@ export interface IStoreInfo {
   }[];
   storeId: string;
   adminId: string;
+  /**
+   * Tenant key for this store, issued by the slug endpoint.
+   *
+   * Carries the tenant on the integration routes. It is public — anyone can
+   * fetch a slug and read it — so treat it as a label identifying which
+   * restaurant a call concerns, not as a credential.
+   */
+  apiKey: string;
   tableInfo: {
     token: string;
     areaId: string;

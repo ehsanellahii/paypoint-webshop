@@ -63,6 +63,7 @@ export default function FavoriteButton({
   const commitToggle = async () => {
     const slug = storeInfo?.slug ?? storeKey;
     const res = await toggleFavorite({
+      apiKey: storeInfo?.apiKey,
       adminId: storeInfo?.adminId,
       storeId: storeInfo?.storeId,
       customerId: customerId ?? undefined,

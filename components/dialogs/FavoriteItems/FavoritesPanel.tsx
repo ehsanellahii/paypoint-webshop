@@ -23,7 +23,7 @@ export default function FavoritesPanel({ active, onOpenProduct, onBrowse }: { ac
   const { addToCart } = useCart();
   const storeKey = storeInfo?.slug || 'default';
   const logoURL = storeInfo?.settings?.logo || '';
-  const { products, loading } = useResolvedFavorites(storeKey, active, storeInfo?.storeId || '', storeInfo?.adminId || '');
+  const { products, loading } = useResolvedFavorites(storeKey, active, storeInfo?.storeId || '', storeInfo?.adminId || '', storeInfo?.apiKey || '');
 
   // Keep the visible set in sync as the user removes hearts.
   const [favIds, setFavIds] = useState<Set<string>>(new Set());

@@ -77,14 +77,14 @@ export default function Cart({ isOpen: controlledIsOpen, onOpenChange, recommend
     if (!isOpen || !storeInfo?.adminId || !storeInfo?.storeId) return;
     let cancelled = false;
 
-    fetchCartRecommendations(storeInfo.adminId, storeInfo.storeId, cartKey ? cartKey.split(',') : [], 8).then((res) => {
+    fetchCartRecommendations(storeInfo.adminId, storeInfo.storeId, storeInfo.apiKey, cartKey ? cartKey.split(',') : [], 8).then((res) => {
       if (!cancelled) setServerRecs(res);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [isOpen, cartKey, storeInfo?.adminId, storeInfo?.storeId]);
+  }, [isOpen, cartKey, storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey]);
 
   const fallbackRecs = recommendations.filter((p) => !cart.some((c) => c.product.id === p.id)).slice(0, 8);
   const recs = (serverRecs.length > 0 ? serverRecs : fallbackRecs).filter((p) => !cart.some((c) => c.product.id === p.id)).slice(0, 8);

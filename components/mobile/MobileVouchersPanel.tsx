@@ -3,7 +3,7 @@
 import React from 'react';
 import { AlertCircle, Loader2, Ticket, X } from 'lucide-react';
 
-import { API_BASE_URL, formatPrice, X_API_KEY } from '~/lib/api';
+import { API_BASE_URL, formatPrice, apiHeaders } from '~/lib/api';
 import { getTranslatedVoucherApiErrorMessage } from '~/lib/errorMessages';
 import { useCart } from '~/contexts/cart-context';
 import { useLanguage } from '~/contexts/language-context';
@@ -46,7 +46,7 @@ export default function MobileVouchersPanel() {
     try {
       const res = await fetch(`${API_BASE_URL}/vouchers/apply`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-API-KEY': X_API_KEY || '' },
+        headers: apiHeaders({ apiKey: storeInfo?.apiKey }),
         body: JSON.stringify({ storeId: storeInfo.storeId, customerId, promoCode: value, orderTotalAmount: totalPrice }),
       });
       if (!res.ok) {

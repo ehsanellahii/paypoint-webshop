@@ -35,6 +35,11 @@ export interface Translations {
   pay: string;
   cash: string;
   posCardPayment: string;
+  /** The EC/girocard terminal — paid in person, distinct from an online card. */
+  ecCard: string;
+  /** One row for cards and wallets; Stripe decides what the device supports. */
+  cardAndWallets: string;
+  cardAndWalletsSub: string;
 
   specialInstructions: string;
   addAnySpecialRequests: string;
@@ -152,6 +157,9 @@ export interface Translations {
   goToCheckout: string;
   loginWelcome: string;
   loginSub: string;
+  verifyPhoneTitle: string;
+  verifyPhoneSub: string;
+  sendCode: string;
   continueAsGuest: string;
   orDivider: string;
   legalNoticePrefix: string;
@@ -227,6 +235,23 @@ export interface Translations {
   availableOffers: string;
   payNow: string;
   paymentFailed: string;
+  /** Shown when an off-site payment (PayPal, Klarna) comes back declined. */
+  paymentNotCompletedSub: string;
+  tryAgain: string;
+  /** The order is paid but the webhook has not created it yet. */
+  confirmingPayment: string;
+  confirmingPaymentSub: string;
+  /** Polling gave up: paid, but no order on our side. Needs a human. */
+  orderNotConfirmed: string;
+  orderNotConfirmedSub: string;
+  callTheRestaurant: string;
+  /** The link names no order, or one we cannot find. */
+  /** A refund was issued; a full one also cancels the order. */
+  orderRefunded: string;
+  orderRefundedSub: string;
+  refunded: string;
+  orderNotFound: string;
+  orderNotFoundSub: string;
   paymentType: string;
   callbackNumberShort: string;
   driverInstructions: string;
@@ -404,6 +429,9 @@ export const translations: Record<Language, Translations> = {
     pay: 'Pay',
     cash: 'Cash',
     posCardPayment: 'Card Payment',
+    ecCard: 'EC card',
+    cardAndWallets: 'Card & wallets',
+    cardAndWalletsSub: 'Visa, Mastercard, Apple Pay, Google Pay',
 
     // specialInstructions: 'Special Instructions (Optional)',
     addAnySpecialRequests: 'Add any special requests...',
@@ -519,6 +547,9 @@ export const translations: Record<Language, Translations> = {
     goToCheckout: 'Go to checkout',
     loginWelcome: 'Welcome to',
     loginSub: 'Sign in to order — or check out as a guest.',
+    verifyPhoneTitle: 'Confirm your number',
+    verifyPhoneSub: 'We text you a 6-digit code. It takes a moment and lets the restaurant reach you if anything about your order needs checking.',
+    sendCode: 'Send code',
     continueAsGuest: 'Order as a guest',
     orDivider: 'or',
     legalNoticePrefix: 'By signing in you accept our',
@@ -594,6 +625,18 @@ export const translations: Record<Language, Translations> = {
     availableOffers: 'Available offers',
     payNow: 'Pay now',
     paymentFailed: 'Payment failed',
+    paymentNotCompletedSub: 'Your payment was not completed, so no order has been placed. Your basket is still here.',
+    tryAgain: 'Try again',
+    confirmingPayment: 'Confirming payment',
+    confirmingPaymentSub: 'This usually takes a few seconds. Please keep this page open.',
+    orderNotConfirmed: 'We could not confirm your order',
+    orderNotConfirmedSub: 'Your payment may have gone through, but we have not been able to confirm the order. Please contact the restaurant with the reference below before ordering again.',
+    callTheRestaurant: 'Call the restaurant',
+    orderRefunded: 'This order was refunded',
+    orderRefundedSub: 'The restaurant has refunded this order. Depending on your bank it can take a few days to appear.',
+    refunded: 'Refunded',
+    orderNotFound: 'Order not found',
+    orderNotFoundSub: 'We could not find an order for this link.',
     paymentType: 'Payment type',
     callbackNumberShort: 'Callback number',
     driverInstructions: 'Instructions for the driver (e.g. back door, 3rd floor)',
@@ -769,6 +812,9 @@ export const translations: Record<Language, Translations> = {
     pay: 'Bezahlen',
     cash: 'Bargeld',
     posCardPayment: 'Kartenzahlung',
+    ecCard: 'EC-Karte',
+    cardAndWallets: 'Karte & Wallets',
+    cardAndWalletsSub: 'Visa, Mastercard, Apple Pay, Google Pay',
 
     // specialInstructions: 'Spezielle Anweisungen (Optional)',
     addAnySpecialRequests: 'Fügen Sie spezielle Wünsche hinzu...',
@@ -884,6 +930,9 @@ export const translations: Record<Language, Translations> = {
     goToCheckout: 'Zur Kasse gehen',
     loginWelcome: 'Willkommen bei',
     loginSub: 'Melde dich an, um zu bestellen – oder bestelle direkt als Gast.',
+    verifyPhoneTitle: 'Nummer bestätigen',
+    verifyPhoneSub: 'Wir senden dir einen 6-stelligen Code per SMS. Das dauert nur einen Moment und stellt sicher, dass das Restaurant dich bei Rückfragen zur Bestellung erreicht.',
+    sendCode: 'Code senden',
     continueAsGuest: 'Als Gast bestellen',
     orDivider: 'oder',
     legalNoticePrefix: 'Mit der Anmeldung akzeptierst du unsere',
@@ -959,6 +1008,18 @@ export const translations: Record<Language, Translations> = {
     availableOffers: 'Verfügbare Aktionen',
     payNow: 'Jetzt bezahlen',
     paymentFailed: 'Zahlung fehlgeschlagen',
+    paymentNotCompletedSub: 'Deine Zahlung wurde nicht abgeschlossen, es wurde keine Bestellung aufgegeben. Dein Warenkorb ist noch da.',
+    tryAgain: 'Erneut versuchen',
+    confirmingPayment: 'Zahlung wird bestätigt',
+    confirmingPaymentSub: 'Das dauert normalerweise nur wenige Sekunden. Bitte lass diese Seite geöffnet.',
+    orderNotConfirmed: 'Wir konnten deine Bestellung nicht bestätigen',
+    orderNotConfirmedSub: 'Deine Zahlung wurde möglicherweise ausgeführt, aber wir konnten die Bestellung nicht bestätigen. Bitte kontaktiere das Restaurant mit der unten stehenden Referenz, bevor du erneut bestellst.',
+    callTheRestaurant: 'Restaurant anrufen',
+    orderRefunded: 'Diese Bestellung wurde erstattet',
+    orderRefundedSub: 'Das Restaurant hat diese Bestellung erstattet. Je nach Bank kann es einige Tage dauern, bis der Betrag erscheint.',
+    refunded: 'Erstattet',
+    orderNotFound: 'Bestellung nicht gefunden',
+    orderNotFoundSub: 'Wir konnten zu diesem Link keine Bestellung finden.',
     paymentType: 'Zahlungsart',
     callbackNumberShort: 'Rückrufnummer',
     driverInstructions: 'Anweisungen für den Fahrer (z. B. Hintertür, 3. Stock)',

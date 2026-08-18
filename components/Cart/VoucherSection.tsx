@@ -4,7 +4,7 @@ import React from 'react';
 import { Check, Loader2, Tag, X } from 'lucide-react';
 import { useLanguage } from '@/contexts/language-context';
 import { useCart } from '~/contexts/cart-context';
-import { API_BASE_URL, formatPrice, X_API_KEY } from '@/lib/api';
+import { API_BASE_URL, formatPrice, apiHeaders } from '@/lib/api';
 import { useUser } from '~/contexts/user-context';
 import { getTranslatedVoucherApiErrorMessage } from '~/lib/errorMessages';
 import { useStore } from '~/contexts/store-context';
@@ -53,10 +53,7 @@ export default function VoucherSection({ disabled, variant = 'card' }: Props) {
     try {
       const res = await fetch(`${API_BASE_URL}/vouchers/apply`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-KEY': X_API_KEY || '',
-        },
+        headers: apiHeaders({ apiKey: storeInfo?.apiKey }),
         body: JSON.stringify({
           storeId: storeInfo.storeId,
           customerId,

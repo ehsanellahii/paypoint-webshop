@@ -58,7 +58,7 @@ export default function MobileCartScreen() {
   useEffect(() => {
     if (!storeInfo?.adminId || !storeInfo?.storeId) return;
     let cancelled = false;
-    fetchCartRecommendations(storeInfo.adminId, storeInfo.storeId, cartKey ? cartKey.split(',') : [], 4).then((res) => {
+    fetchCartRecommendations(storeInfo.adminId, storeInfo.storeId, storeInfo.apiKey, cartKey ? cartKey.split(',') : [], 4).then((res) => {
       if (!cancelled) setRecs(res.filter((p) => !cart.some((c) => c.product.id === p.id)).slice(0, 4));
     });
     return () => {
