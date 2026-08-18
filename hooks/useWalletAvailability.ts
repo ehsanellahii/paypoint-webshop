@@ -18,25 +18,9 @@ import { useStore } from '~/contexts/store-context';
  * who cannot use it. The cost of being wrong in that direction is a dead
  * option in the list; the other direction just hides a shortcut.
  */
-/*
- * TEMPORARY — testing only.
- *
- * Forces the Google Pay row on regardless of what the device reports, so we can
- * see whether the Element renders the button once it is actually asked to. If
- * the button still does not appear, the cap is Stripe's parent payment method
- * configuration and not this gate.
- *
- * Revert before release: on a device that genuinely cannot pay this way the row
- * leads to a card form, and the order still records `googlePay`.
- */
-const FORCE_GOOGLE_PAY = true;
-
 export function useWalletAvailability() {
   const storeInfo = useStore();
-  const [wallets, setWallets] = useState({
-    applePay: false,
-    googlePay: FORCE_GOOGLE_PAY,
-  });
+  const [wallets, setWallets] = useState({ applePay: false, googlePay: false });
 
   useEffect(() => {
     const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '';
@@ -71,7 +55,7 @@ export function useWalletAvailability() {
 
         setWallets({
           applePay: !!result.applePay,
-          googlePay: FORCE_GOOGLE_PAY || !!result.googlePay,
+          googlePay: !!result.googlePay,
         });
       } catch {
         // Leave both false: no wallet row is better than a broken one.
