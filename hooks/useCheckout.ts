@@ -58,7 +58,7 @@ const resolveCustomerName = (accountName?: string | null) =>
  * Methods settled online, before the order is placed. Cash and the EC reader
  * are collected in person, so those orders go straight through as before.
  */
-const ONLINE_METHODS = new Set<PaymentMethod>(['cardWallets', 'paypal', 'klarna']);
+const ONLINE_METHODS = new Set<PaymentMethod>(['cardWallets', 'applePay', 'googlePay', 'paypal', 'klarna']);
 
 export function useCheckout() {
   const { t } = useLanguage();
@@ -104,7 +104,7 @@ export function useCheckout() {
   const [touched, setTouched] = useState(false);
   const [placing, setPlacing] = useState(false);
   /** Set once Stripe has something to charge; drives the payment sheet. */
-  const [payNow, setPayNow] = useState<{ clientSecret: string; stripeAccountId: string; amount: number; orderId: string } | null>(null);
+  const [payNow, setPayNow] = useState<{ clientSecret: string; stripeAccountId: string; amount: number; orderId: string; method: PaymentMethod } | null>(null);
   /*
    * Opens the sign-in flow when an unverified customer tries to order.
    *
@@ -433,6 +433,9 @@ export function useCheckout() {
           stripeAccountId: intent.stripe_account_id,
           amount: intent.amount,
           orderId: orderRef,
+          // Which wallet the customer asked for, so the Element can offer that
+          // one rather than every wallet the device happens to support.
+          method: paymentMethod,
         });
         setPlacing(false);
         return;

@@ -454,6 +454,7 @@ export default function CheckoutScreen() {
           clientSecret={payNow.clientSecret}
           stripeAccountId={payNow.stripeAccountId}
           amount={payNow.amount}
+          method={payNow.method}
           returnUrl={typeof window !== 'undefined' ? `${window.location.origin}/${storeInfo?.slug ?? ''}/confirmation?order=${payNow.orderId}` : ''}
         />
       )}

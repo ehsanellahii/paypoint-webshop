@@ -9,6 +9,7 @@ import { useIsMobile } from '~/contexts/device-context';
 import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
 import { useAddress } from '~/contexts/address-context';
+import { useWalletAvailability } from '~/hooks/useWalletAvailability';
 
 /**
  * The methods checkout can hand back. Each maps to a value in the server's
@@ -17,7 +18,7 @@ import { useAddress } from '~/contexts/address-context';
  * `card` is the in-store EC/girocard reader, kept under that name because the
  * order payload has always mapped it to `ec-card reader`.
  */
-export type PaymentMethod = 'cash' | 'card' | 'cardWallets' | 'paypal' | 'klarna';
+export type PaymentMethod = 'cash' | 'card' | 'cardWallets' | 'applePay' | 'googlePay' | 'paypal' | 'klarna';
 
 /** Every row the sheet can draw. */
 type MethodId = PaymentMethod;
@@ -31,6 +32,9 @@ export const ORDER_PAYMENT_METHOD: Record<PaymentMethod, string> = {
   // The terminal at the counter or the door, not an online card.
   card: 'ec-card reader',
   cardWallets: 'card',
+  // Both ride on `card` at Stripe; recorded separately so the order says which.
+  applePay: 'applePay',
+  googlePay: 'googlePay',
   paypal: 'paypal',
   klarna: 'klarna',
 };
@@ -58,6 +62,27 @@ const CardsMark = () => (
   </svg>
 );
 
+
+const ApplePayMark = () => (
+  <span className='flex items-center gap-px'>
+    <svg width='13' height='15' viewBox='0 0 22 26' fill='#000' aria-hidden>
+      <path d='M15.3 13.6c0-2 1.6-2.9 1.7-3-1-1.4-2.4-1.6-2.9-1.6-1.2-.1-2.4.7-3 .7-.6 0-1.6-.7-2.6-.7-1.3 0-2.6.8-3.2 2-1.4 2.4-.4 6 1 7.9.7.9 1.4 2 2.5 1.9 1-.04 1.4-.6 2.6-.6s1.5.6 2.6.6 1.7-.9 2.4-1.8c.7-1 1-2 1-2.1-.1 0-1.9-.7-1.9-2.8zM13.4 7.5c.5-.7.9-1.6.8-2.5-.8 0-1.7.5-2.3 1.2-.5.6-.9 1.5-.8 2.4.9.1 1.7-.4 2.3-1.1z' />
+    </svg>
+    <span className='text-[12.5px] font-bold text-black'>Pay</span>
+  </span>
+);
+
+const GooglePayMark = () => (
+  <span className='flex items-center gap-[3px]'>
+    <svg width='13' height='13' viewBox='0 0 24 24' aria-hidden>
+      <path fill='#4285F4' d='M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5a5.6 5.6 0 0 1-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.8z' />
+      <path fill='#34A853' d='M12 24c3.2 0 5.9-1.1 7.9-2.9l-3.9-3c-1.1.7-2.4 1.2-4 1.2-3.1 0-5.7-2.1-6.6-4.9H1.4v3.1A12 12 0 0 0 12 24z' />
+      <path fill='#FBBC05' d='M5.4 14.4a7.2 7.2 0 0 1 0-4.6V6.7H1.4a12 12 0 0 0 0 10.8l4-3.1z' />
+      <path fill='#EA4335' d='M12 4.7c1.8 0 3.4.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.4 6.7l4 3.1C6.3 6.9 8.9 4.7 12 4.7z' />
+    </svg>
+    <span className='text-[12.5px] font-bold text-black'>Pay</span>
+  </span>
+);
 
 const CashMark = () => (
   <svg width='22' height='18' viewBox='0 0 24 20' fill='none' stroke='#2e9e5b' strokeWidth={1.8} aria-hidden>
@@ -95,6 +120,8 @@ type MethodSpec = {
  */
 const METHODS: MethodSpec[] = [
   { id: 'cardWallets', method: 'cardWallets', mark: <CardsMark />, tileClass: 'bg-white', group: 'cards' },
+  { id: 'applePay', method: 'applePay', mark: <ApplePayMark />, tileClass: 'bg-white', group: 'cards' },
+  { id: 'googlePay', method: 'googlePay', mark: <GooglePayMark />, tileClass: 'bg-white', group: 'cards' },
   { id: 'cash', method: 'cash', mark: <CashMark />, tileClass: 'bg-white', group: 'other' },
   { id: 'card', method: 'card', mark: <EcMark />, tileClass: 'bg-white', group: 'other' },
   { id: 'paypal', method: 'paypal', mark: <PaypalMark />, tileClass: 'bg-white', group: 'other' },
@@ -109,7 +136,11 @@ export function paymentMethodLabel(m: PaymentMethod, t: any): string {
     case 'card':
       return t.ecCard ?? 'EC card';
     case 'cardWallets':
-      return t.cardAndWallets ?? 'Card & wallets';
+      return t.paymentCards;
+    case 'applePay':
+      return 'Apple Pay';
+    case 'googlePay':
+      return 'Google Pay';
     case 'paypal':
       return 'PayPal';
     case 'klarna':
@@ -132,10 +163,11 @@ export function serverPaymentMethodLabel(value: string | undefined, t: any): str
     case 'ec-card reader':
       return t.ecCard ?? 'EC card';
     case 'card':
-      return t.cardAndWallets ?? 'Card & wallets';
-    // Orders placed before cards and wallets shared a row.
+      return t.paymentCards;
     case 'applePay':
       return 'Apple Pay';
+    case 'googlePay':
+      return 'Google Pay';
     case 'paypal':
       return 'PayPal';
     case 'klarna':
@@ -155,7 +187,10 @@ export function paymentMethodSub(m: PaymentMethod, t: any, isDelivery: boolean):
     case 'card':
       return isDelivery ? t.onDelivery : t.onPickup;
     case 'cardWallets':
-      return t.cardAndWalletsSub ?? 'Visa, Mastercard, Apple Pay, Google Pay';
+      return 'Visa, Mastercard, Amex';
+    case 'applePay':
+    case 'googlePay':
+      return t.onlinePayment;
     case 'paypal':
       return t.onlinePayment;
     case 'klarna':
@@ -168,6 +203,7 @@ export default function PaymentSheet({ open, onClose, value, onSelect }: Props) 
   const isMobile = useIsMobile();
   const storeInfo = useStore();
   const { orderType } = useAddress();
+  const wallets = useWalletAvailability();
   const isDelivery = orderType === 'delivery';
 
   /*
@@ -208,12 +244,22 @@ export default function PaymentSheet({ open, onClose, value, onSelect }: Props) 
      * this row hands the decision to it.
      */
     cardWallets: canPayOnline,
+    /*
+     * Only where the device can genuinely pay with them. Listing Apple Pay on
+     * Android — which is what happened before — sends a customer down a route
+     * their phone cannot take; `useWalletAvailability` asks Stripe rather than
+     * guessing from the user agent.
+     */
+    applePay: canPayOnline && wallets.applePay,
+    googlePay: canPayOnline && wallets.googlePay,
     paypal: canPayOnline,
     klarna: canPayOnline,
   };
 
   const label: Record<MethodId, string> = {
-    cardWallets: t.cardAndWallets ?? 'Card & wallets',
+    cardWallets: t.paymentCards,
+    applePay: 'Apple Pay',
+    googlePay: 'Google Pay',
     cash: t.cash,
     // Distinct from the online card row above — this one is the terminal.
     card: t.ecCard ?? 'EC card',
@@ -222,7 +268,9 @@ export default function PaymentSheet({ open, onClose, value, onSelect }: Props) 
   };
 
   const sub: Record<MethodId, string> = {
-    cardWallets: t.cardAndWalletsSub ?? 'Visa, Mastercard, Apple Pay, Google Pay',
+    cardWallets: 'Visa, Mastercard, Amex',
+    applePay: t.onlinePayment,
+    googlePay: t.onlinePayment,
     paypal: t.onlinePayment,
     klarna: t.invoiceOrInstalments,
     cash: isDelivery ? t.onDelivery : t.onPickup,

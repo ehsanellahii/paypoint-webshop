@@ -409,6 +409,7 @@ export default function MobileCheckoutScreen() {
           clientSecret={c.payNow.clientSecret}
           stripeAccountId={c.payNow.stripeAccountId}
           amount={c.payNow.amount}
+          method={c.payNow.method}
           returnUrl={typeof window !== 'undefined' ? `${window.location.origin}/${c.storeInfo?.slug ?? ''}/confirmation?order=${c.payNow.orderId}` : ''}
         />
       )}

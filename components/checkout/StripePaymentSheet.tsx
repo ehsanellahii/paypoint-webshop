@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { loadStripe, type Stripe } from '@stripe/stripe-js';
 import { AlertCircle, Loader2, X } from 'lucide-react';
@@ -34,10 +34,12 @@ type Props = {
   amount: number;
   /** Where Stripe sends the customer back after an off-site method. */
   returnUrl: string;
+  /** What the customer picked in our sheet — see the `wallets` option below. */
+  method?: string;
 };
 
 /** The form itself, inside <Elements> so the Stripe hooks have a context. */
-function PayForm({ amount, returnUrl, onClose }: { amount: number; returnUrl: string; onClose: () => void }) {
+function PayForm({ amount, returnUrl, onClose, method }: { amount: number; returnUrl: string; onClose: () => void; method?: string }) {
   const { t } = useLanguage();
   const stripe = useStripe();
   const elements = useElements();
@@ -79,7 +81,21 @@ function PayForm({ amount, returnUrl, onClose }: { amount: number; returnUrl: st
     <form onSubmit={submit}>
       <PaymentElement
         onReady={() => setReady(true)}
-        options={{ layout: 'tabs' }}
+        options={{
+          layout: 'tabs',
+          /*
+           * Offer the wallet the customer actually chose.
+           *
+           * A Mac running Chrome can do both Apple Pay and Google Pay, so
+           * without this, picking one still showed the other. `never` hides a
+           * wallet outright; `auto` leaves the decision to Stripe, which is
+           * what the plain card row wants.
+           */
+          wallets: {
+            applePay: method === 'googlePay' ? 'never' : 'auto',
+            googlePay: method === 'applePay' ? 'never' : 'auto',
+          },
+        }}
       />
 
       {error && (
@@ -103,14 +119,15 @@ function PayForm({ amount, returnUrl, onClose }: { amount: number; returnUrl: st
   );
 }
 
-export default function StripePaymentSheet({ open, onClose, clientSecret, stripeAccountId, amount, returnUrl }: Props) {
+export default function StripePaymentSheet({ open, onClose, clientSecret, stripeAccountId, amount, returnUrl, method }: Props) {
   const { t, language } = useLanguage();
   const isMobile = useIsMobile();
-  const [publishableKey, setPublishableKey] = useState('');
-
-  useEffect(() => {
-    setPublishableKey(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '');
-  }, []);
+  /*
+   * Read straight through rather than via state. `NEXT_PUBLIC_*` is inlined at
+   * build time and is identical on the server and the client, so there was no
+   * hydration mismatch for the effect to avoid — it only cost a second render.
+   */
+  const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '';
 
   const stripePromise = useMemo(
     () => (publishableKey && stripeAccountId ? stripeFor(publishableKey, stripeAccountId) : null),
@@ -130,6 +147,18 @@ export default function StripePaymentSheet({ open, onClose, clientSecret, stripe
         options={{
           clientSecret,
           locale: language === 'de' ? 'de' : 'en',
+          /*
+           * The element renders inside an iframe, so it cannot see the page's
+           * fonts — `fontFamily: 'inherit'` resolved to the iframe's own
+           * default and the whole sheet came out in Times New Roman. Loading
+           * the face into the frame is the only way to match the app.
+           */
+          fonts: [
+            {
+              cssSrc:
+                'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap',
+            },
+          ],
           // Stripe's own theme, nudged to the app's surfaces so the form does
           // not arrive as a white box in a dark sheet.
           appearance: {
@@ -140,11 +169,13 @@ export default function StripePaymentSheet({ open, onClose, clientSecret, stripe
               colorText: '#ffffff',
               colorDanger: '#ff8a7e',
               borderRadius: '14px',
-              fontFamily: 'inherit',
+              // Named explicitly, and loaded above — see the note on `fonts`.
+              fontFamily: '"Plus Jakarta Sans", system-ui, -apple-system, sans-serif',
+              fontSizeBase: '15px',
             },
           },
         }}>
-        <PayForm amount={amount} returnUrl={returnUrl} onClose={onClose} />
+        <PayForm amount={amount} returnUrl={returnUrl} onClose={onClose} method={method} />
       </Elements>
     );
 
