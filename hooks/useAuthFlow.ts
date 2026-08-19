@@ -36,7 +36,10 @@ import { getFavoriteIds, setFavoritesFromIds } from '~/lib/favorites';
  * report ("it says try again later") impossible to act on.
  */
 function withCode(message: string, code?: string) {
-  return code ? `${message} (${code})` : message;
+  // Firebase's own `message` already reads "Firebase: Error (auth/…)", so
+  // appending would print the code twice.
+  if (!code || message.includes(code)) return message;
+  return `${message} (${code})`;
 }
 
 function describeAuthError(
@@ -152,12 +155,11 @@ export function useAuthFlow({
    */
   useEffect(
     () => () => {
-      if (recaptchaVerifierRef.current) {
-        try {
-          recaptchaVerifierRef.current.clear();
-        } catch {}
-        recaptchaVerifierRef.current = null;
-      }
+      if (!recaptchaVerifierRef.current) return;
+      try {
+        recaptchaVerifierRef.current.clear();
+      } catch {}
+      recaptchaVerifierRef.current = null;
     },
     [],
   );
@@ -187,6 +189,23 @@ export function useAuthFlow({
     }
     setDetailsErrors(next);
     return { ok: false as const };
+  };
+
+  /**
+   * Retire the current verifier.
+   *
+   * A reCAPTCHA token may be redeemed once. The instance was cached and only
+   * discarded when a send failed, so the *second* send in a session — a resend,
+   * or another go after fixing a number — handed Firebase a token it had
+   * already consumed and came back `auth/invalid-app-credential`. Called after
+   * every attempt now, successful or not, so each request builds a fresh one.
+   */
+  const clearRecaptcha = () => {
+    if (!recaptchaVerifierRef.current) return;
+    try {
+      recaptchaVerifierRef.current.clear();
+    } catch {}
+    recaptchaVerifierRef.current = null;
   };
 
   const setupRecaptcha = () => {
@@ -227,16 +246,9 @@ export function useAuthFlow({
       // auth/unauthorized-domain, auth/billing-not-enabled, auth/operation-not-allowed.
       console.error('[auth] signInWithPhoneNumber failed', e?.code, e?.message, e);
       setSendError(describeAuthError(e, t));
-
-      // A verifier that has already been used (or failed) is rejected on the next
-      // call, so drop it and let the retry build a fresh one.
-      if (recaptchaVerifierRef.current) {
-        try {
-          recaptchaVerifierRef.current.clear();
-        } catch {}
-        recaptchaVerifierRef.current = null;
-      }
     } finally {
+      // Whether it worked or not — see `clearRecaptcha`.
+      clearRecaptcha();
       setDisabled(false);
     }
   };
