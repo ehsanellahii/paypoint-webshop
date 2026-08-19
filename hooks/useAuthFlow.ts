@@ -25,6 +25,20 @@ import { getFavoriteIds, setFavoritesFromIds } from '~/lib/favorites';
  * Firebase console", so naming the wrong one sends whoever is debugging it to
  * the wrong settings page.
  */
+/**
+ * Append the provider's own error code to a message.
+ *
+ * The sentence tells the customer what to do; the code tells whoever is
+ * debugging which of several causes it actually was — `auth/quota-exceeded` and
+ * `auth/billing-not-enabled` read identically to a customer but need completely
+ * different fixes. It used to be visible only in the browser console, which
+ * meant reproducing the failure just to identify it, and made a customer's
+ * report ("it says try again later") impossible to act on.
+ */
+function withCode(message: string, code?: string) {
+  return code ? `${message} (${code})` : message;
+}
+
 function describeAuthError(
   e: { code?: string; message?: string },
   t: Partial<Record<'invalidPhone' | 'otpSendFailed', string>>,
@@ -34,12 +48,12 @@ function describeAuthError(
 
   switch (e?.code) {
     case 'auth/invalid-phone-number':
-      return t?.invalidPhone ?? 'That phone number does not look right.';
+      return withCode(t?.invalidPhone ?? 'That phone number does not look right.', e?.code);
     case 'auth/too-many-requests':
-      return 'Too many attempts. Please wait a few minutes and try again.';
+      return withCode('Too many attempts. Please wait a few minutes and try again.', e?.code);
     case 'auth/quota-exceeded':
     case 'auth/billing-not-enabled':
-      return 'SMS sending is currently unavailable. Please try again later.';
+      return withCode('SMS sending is currently unavailable. Please try again later.', e?.code);
     /*
      * Firebase returns this one code for two unrelated causes: the provider is
      * switched off, or the SMS region policy does not allow the number's
@@ -49,25 +63,25 @@ function describeAuthError(
      */
     case 'auth/operation-not-allowed':
       if (/region/i.test(e?.message ?? '')) {
-        return 'SMS to this country is not enabled yet. Please try another number or contact us.';
+        return withCode('SMS to this country is not enabled yet. Please try another number or contact us.', e?.code);
       }
-      return `${providerName} sign-in is not enabled for this site.`;
+      return withCode(`${providerName} sign-in is not enabled for this site.`, e?.code);
     case 'auth/unauthorized-domain':
-      return 'This domain is not authorised for sign-in.';
+      return withCode('This domain is not authorised for sign-in.', e?.code);
     case 'auth/captcha-check-failed':
-      return 'Verification failed. Please try again.';
+      return withCode('Verification failed. Please try again.', e?.code);
     /*
      * The same address already signed in through another provider. Firebase
      * refuses to guess which identity is meant, and the customer cannot tell
      * from the raw code what to do about it.
      */
     case 'auth/account-exists-with-different-credential':
-      return 'This email is already linked to a different sign-in method. Please use the one you signed up with.';
+      return withCode('This email is already linked to a different sign-in method. Please use the one you signed up with.', e?.code);
     case 'auth/popup-blocked':
-      return 'Your browser blocked the sign-in window. Please allow pop-ups and try again.';
+      return withCode('Your browser blocked the sign-in window. Please allow pop-ups and try again.', e?.code);
     default:
-      if (provider !== 'phone') return e?.message || `${providerName} sign-in failed. Please try again.`;
-      return e?.message || t?.otpSendFailed || 'Failed to send OTP. Please try again.';
+      if (provider !== 'phone') return withCode(e?.message || `${providerName} sign-in failed. Please try again.`, e?.code);
+      return withCode(e?.message || t?.otpSendFailed || 'Failed to send OTP. Please try again.', e?.code);
   }
 }
 
@@ -211,7 +225,7 @@ export function useAuthFlow({
     } catch (e: any) {
       // common firebase errors: auth/invalid-phone-number, auth/too-many-requests,
       // auth/unauthorized-domain, auth/billing-not-enabled, auth/operation-not-allowed.
-      console.error('[auth] signInWithPhoneNumber failed', e?.code, e);
+      console.error('[auth] signInWithPhoneNumber failed', e?.code, e?.message, e);
       setSendError(describeAuthError(e, t));
 
       // A verifier that has already been used (or failed) is rejected on the next
@@ -271,11 +285,11 @@ export function useAuthFlow({
       const code = e?.code as string | undefined;
 
       if (code === 'auth/invalid-verification-code') {
-        setOtpError(t?.invalidOtp ?? 'Invalid OTP. Please try again.');
+        setOtpError(withCode(t?.invalidOtp ?? 'Invalid OTP. Please try again.', code));
       } else if (code === 'auth/code-expired') {
-        setOtpError(t?.otpExpired ?? 'OTP expired. Please resend.');
+        setOtpError(withCode(t?.otpExpired ?? 'OTP expired. Please resend.', code));
       } else {
-        setOtpError(e?.message || t?.otpVerifyFailed || 'Failed to verify OTP.');
+        setOtpError(withCode(e?.message || t?.otpVerifyFailed || 'Failed to verify OTP.', code));
       }
     } finally {
       setDisabled(false);
