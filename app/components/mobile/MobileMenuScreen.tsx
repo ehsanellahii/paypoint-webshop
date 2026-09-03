@@ -321,7 +321,11 @@ function MobileProductRow({
           {product.name}
         </div>
         {product.description && <div className='mt-1 text-sm font-medium leading-[1.35] text-muted-foreground'>{product.description}</div>}
-        <div className='mt-1.5 text-[15px] font-extrabold text-white'>{formatPrice(product.currentPrice)}</div>
+        <div className='mt-1.5 text-[15px] font-extrabold text-white'>
+          {(product.skus?.length ?? 0) > 1
+            ? `ab ${formatPrice(Math.min(...product.skus!.map((sku) => sku.price)))}`
+            : formatPrice(product.currentPrice)}
+        </div>
       </div>
 
       <div className='relative shrink-0'>

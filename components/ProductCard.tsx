@@ -48,8 +48,13 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
   const hasPhoto = !!product.images?.length;
   const imageUrl = hasPhoto ? getImageURL(product.images[0]) : logoURL;
 
-  // Products with a required customization group must be configured in the modal.
-  const requiresModal = product.haveCustomizations && (product.addOns || []).some((g) => (g.minimumQuantity ?? 0) > 0);
+  // Products with a required customization group must be configured in the
+  // modal — and so must anything with a size to pick, since the price depends
+  // on it and there is nothing sensible to add without an answer.
+  const skus = product.skus ?? [];
+  const hasSizeChoice = skus.length > 1;
+  const requiresModal =
+    hasSizeChoice || (product.haveCustomizations && (product.addOns || []).some((g) => (g.minimumQuantity ?? 0) > 0));
 
   // The "simple" (no-customization) cart line for this product.
   const simpleLine = cart.find((i) => i.product.id === product.id && Object.keys(i.customizations || {}).length === 0);
@@ -94,7 +99,9 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
         {product.description && <div className='mt-1.5 line-clamp-2 text-[13px] font-medium leading-[1.45] text-muted-foreground'>{product.description}</div>}
 
         <div className='mt-auto flex items-center justify-between pt-3'>
-          <span className='text-base font-extrabold'>{formatPrice(product.currentPrice)}</span>
+          <span className='text-base font-extrabold'>
+            {hasSizeChoice ? `ab ${formatPrice(Math.min(...skus.map((sku) => sku.price)))}` : formatPrice(product.currentPrice)}
+          </span>
           <FavoriteButton storeKey={storeKey} productId={product._id} name={product.name} image={product.images?.[0]} price={product.currentPrice} />
         </div>
 

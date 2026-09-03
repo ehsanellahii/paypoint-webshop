@@ -29,6 +29,11 @@ export default function MobileProductScreen({ productId }: { productId: string }
   const [quantity, setQuantity] = useState(1);
   const [selected, setSelected] = useState<Customization>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // A single-SKU product has no size to choose; the row below stays hidden.
+  const [selectedSkuId, setSelectedSkuId] = useState<string | null>(null);
+  const skus = product?.skus ?? [];
+  const selectedSku =
+    skus.find((sku) => sku._id === selectedSkuId) ?? skus.find((sku) => sku.available) ?? skus[0];
 
   useEffect(() => {
     let cancelled = false;
@@ -81,7 +86,7 @@ export default function MobileProductScreen({ productId }: { productId: string }
 
   const total = useMemo(() => {
     if (!product) return 0;
-    let sum = product.currentPrice;
+    let sum = selectedSku?.price ?? product.currentPrice;
     (product.addOns ?? []).forEach((section) => {
       Object.entries(selected[section._id] ?? {}).forEach(([optionId, qty]) => {
         const opt = section.options.find((o) => o._id === optionId);
@@ -89,7 +94,7 @@ export default function MobileProductScreen({ productId }: { productId: string }
       });
     });
     return sum * quantity;
-  }, [product, selected, quantity]);
+  }, [product, selected, quantity, selectedSku]);
 
   const submit = () => {
     if (!product) return;
@@ -103,7 +108,7 @@ export default function MobileProductScreen({ productId }: { productId: string }
       document.getElementById(`opt-${Object.keys(next)[0]}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
-    addToCart(product, quantity, selected);
+    addToCart(product, quantity, selected, undefined, selectedSku);
     back();
   };
 
@@ -149,8 +154,36 @@ export default function MobileProductScreen({ productId }: { productId: string }
         {/* The sheet overlaps the photo, so the title sits over its lower edge. */}
         <div className='relative z-[2] -mt-[30px] px-5 pb-[120px] pt-1'>
           <h1 className='m-0 mt-[30px] text-[26px] font-black leading-[1.15] tracking-[-0.01em] text-white'>{product.name}</h1>
-          <div className='mt-2 text-[19px] font-extrabold text-[#82c2e5]'>{formatPrice(product.currentPrice)}</div>
+          <div className='mt-2 text-[19px] font-extrabold text-[#82c2e5]'>{formatPrice(selectedSku?.price ?? product.currentPrice)}</div>
           {product.description && <div className='mt-2.5 text-sm font-medium leading-[1.55] text-fg-tertiary'>{product.description}</div>}
+
+          {/* Size first: it sets the price the options are added to. */}
+          {skus.length > 1 && (
+            <div className='mt-[26px]'>
+              <p className='text-[16px] font-extrabold'>Größe</p>
+              <div className='mt-2.5 flex flex-wrap gap-2'>
+                {skus.map((sku) => {
+                  const isSelected = sku._id === selectedSku?._id;
+                  return (
+                    <button
+                      key={sku._id}
+                      className={`flex min-w-[110px] flex-col items-start gap-0.5 rounded-[14px] border px-3.5 py-2.5 text-left ${
+                        isSelected ? 'border-[#82c2e5] bg-[#82c2e5]/10' : 'border-border bg-white/5'
+                      } ${sku.available ? '' : 'opacity-45'}`}
+                      disabled={!sku.available}
+                      type='button'
+                      onClick={() => setSelectedSkuId(sku._id)}
+                    >
+                      <span className='text-[14.5px] font-extrabold'>{sku.name ?? product.name}</span>
+                      <span className='text-[13px] font-semibold text-fg-soft'>
+                        {sku.available ? formatPrice(sku.price) : 'Nicht verfügbar'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {(product.addOns ?? []).length > 0 && <div className='mt-[26px] h-px bg-border' />}
 

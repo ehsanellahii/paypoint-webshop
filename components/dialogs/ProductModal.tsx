@@ -28,6 +28,12 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
   const [selectedOptions, setSelectedOptions] = useState<CartItemCustomization>({});
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // A single-SKU product has no size to choose; the row below stays hidden and
+  // this is simply the only variant.
+  const skus = product?.skus ?? [];
+  const [selectedSkuId, setSelectedSkuId] = useState<string | null>(null);
+  const selectedSku =
+    skus.find((sku) => sku._id === selectedSkuId) ?? skus.find((sku) => sku.available) ?? skus[0];
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -38,6 +44,7 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
     setNotes('');
     setSelectedOptions({});
     setErrors({});
+    setSelectedSkuId(null);
   }, [isOpen, product]);
 
   if (!product) return null;
@@ -103,7 +110,7 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
   };
 
   const calculateTotalPrice = () => {
-    let total = product.currentPrice;
+    let total = selectedSku?.price ?? product.currentPrice;
     (product.addOns || []).forEach((section) => {
       const group = selectedOptions[section._id] || {};
       Object.entries(group).forEach(([optionId, qty]) => {
@@ -129,7 +136,7 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
       return;
     }
     setErrors({});
-    addToCart(product, quantity, selectedOptions, notes);
+    addToCart(product, quantity, selectedOptions, notes, selectedSku);
     onClose();
   };
 
@@ -163,7 +170,7 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
               <div className='p-6'>
                 <h2 className='m-0 font-display text-[28px] font-extrabold leading-[1.05] tracking-tight'>{product.name}</h2>
                 <div className='mt-2.5 flex items-center gap-3'>
-                  <span className='text-[15px] font-semibold text-fg-soft'>{formatPrice(product.currentPrice)}</span>
+                  <span className='text-[15px] font-semibold text-fg-soft'>{formatPrice(selectedSku?.price ?? product.currentPrice)}</span>
                 </div>
 
                 {product.description && (
@@ -172,6 +179,37 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                       <Info className='h-[18px] w-[18px]' />
                     </span>
                     <span className='text-[13.5px] font-semibold text-fg-on-photo'>{product.description}</span>
+                  </div>
+                )}
+
+                {/*
+                  Size first: it sets the price, so choosing one after the
+                  options would surprise the guest at the total.
+                */}
+                {skus.length > 1 && (
+                  <div className='mt-5'>
+                    <p className='text-[15px] font-extrabold'>Größe</p>
+                    <div className='mt-2.5 flex flex-wrap gap-2'>
+                      {skus.map((sku) => {
+                        const isSelected = sku._id === selectedSku?._id;
+                        return (
+                          <button
+                            key={sku._id}
+                            className={`flex min-w-[112px] flex-col items-start gap-0.5 rounded-[14px] border px-3.5 py-2.5 text-left transition-colors ${
+                              isSelected ? 'border-accent bg-accent/10' : 'border-white/12 bg-white/5 hover:bg-white/10'
+                            } ${sku.available ? '' : 'cursor-not-allowed opacity-45'}`}
+                            disabled={!sku.available}
+                            type='button'
+                            onClick={() => setSelectedSkuId(sku._id)}
+                          >
+                            <span className='text-[14.5px] font-extrabold'>{sku.name ?? product.name}</span>
+                            <span className='text-[13px] font-semibold text-fg-soft'>
+                              {sku.available ? formatPrice(sku.price) : 'Nicht verfügbar'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 

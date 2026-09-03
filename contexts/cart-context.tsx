@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect, startTransition } from 'react';
-import { MenuProduct, getImageURL } from '../lib/utils';
+import { MenuProduct, MenuSku, getImageURL } from '../lib/utils';
 
 /** Fired whenever an item is added to the cart, so the toast/animation layer can react globally. */
 export type CartAddedDetail = { name: string; image: string };
@@ -22,7 +22,7 @@ export interface CartItem {
 
 interface CartContextType {
   cart: CartItem[];
-  addToCart: (product: MenuProduct, quantity: number, customizations: CartItemCustomization, notes?: string) => void;
+  addToCart: (product: MenuProduct, quantity: number, customizations: CartItemCustomization, notes?: string, sku?: MenuSku) => void;
   removeFromCart: (itemId: string) => void;
   updateQuantity: (itemId: string, quantity: number) => void;
   clearCart: () => void;
@@ -158,11 +158,25 @@ export function CartProvider({ children, storeKey = 'default' }: { children: Rea
     if (isHydrated) saveCart(storageKey, cart);
   }, [cart, isHydrated, storageKey]);
 
-  const addToCart = useCallback((product: MenuProduct, quantity: number, customizations: CartItemCustomization, notes?: string) => {
+  const addToCart = useCallback((product: MenuProduct, quantity: number, customizations: CartItemCustomization, notes?: string, sku?: MenuSku) => {
     const safeQty = Math.max(1, Math.floor(quantity || 1));
 
+    // The line carries the variant's own price and name, so every total,
+    // receipt and checkout row downstream reads the right figure without
+    // knowing SKUs exist.
+    const line: MenuProduct = sku
+      ? {
+          ...product,
+          currentPrice: sku.price,
+          name: sku.name ? `${product.name} (${sku.name})` : product.name,
+          skuRef: sku._id,
+          skuName: sku.name,
+        }
+      : product;
+
     const normalizedKey = stableStringifyCustomizations(customizations || {});
-    const itemId = `${product.id}-${normalizedKey}`;
+    // Two sizes of one product are two lines, so the variant is part of the key.
+    const itemId = `${product.id}-${sku?._id ?? 'base'}-${normalizedKey}`;
 
     if (typeof window !== 'undefined') {
       const image = product.images?.length ? getImageURL(product.images[0]) : '';
@@ -180,7 +194,7 @@ export function CartProvider({ children, storeKey = 'default' }: { children: Rea
         ...prevCart,
         {
           id: itemId,
-          product,
+          product: line,
           quantity: safeQty,
           customizations: customizations || {},
           notes,

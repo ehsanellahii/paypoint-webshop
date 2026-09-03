@@ -138,6 +138,16 @@ export interface MenuCategory {
 // ------------------------------
 // Product
 // ------------------------------
+/** One buyable variant — a size, a portion, a bottle. */
+export interface MenuSku {
+  _id: MongoId;
+  /** Null when the product has no size axis. */
+  name: string | null;
+  price: number;
+  available: boolean;
+  optionListIds: MongoId[];
+}
+
 export interface MenuProduct {
   _id: MongoId; // you have both _id and id
   id: MongoId;
@@ -150,6 +160,11 @@ export interface MenuProduct {
   images: string[];
   haveCustomizations: boolean;
   addOns: AddOnGroup[];
+  /** Every variant. One entry means there is no size choice to make. */
+  skus?: MenuSku[];
+  /** Set on the copy held in the cart, so the line knows what was sold. */
+  skuRef?: MongoId;
+  skuName?: string | null;
 }
 
 // ------------------------------
@@ -197,7 +212,7 @@ export const getImageURL = (imageKey: string): string => {
    * Encode per segment so a key that ever contains a folder still works.
    */
   const encodedKey = imageKey.split('/').map(encodeURIComponent).join('/');
-  return 'https://paypoint-web-storage.s3.eu-central-1.amazonaws.com/menu/' + encodedKey;
+  return 'https://paypoint-storage.s3.eu-central-1.amazonaws.com/menu/' + encodedKey;
 };
 
 type FormattedAddOn = {
@@ -248,11 +263,17 @@ export function formatCartItemsForOrder(cart: any[]) {
       name: product.name,
       quantity,
       currentPrice: product.currentPrice,
-      originalPrice: product.originalPrice,
-      discount: product.discount ?? 0,
-      discountType: product.discountType ?? 'fixed',
+      // A product has one price now; the order line keeps these fields because
+      // a voucher can still discount the order, and the server reprices
+      // authoritatively on submit.
+      originalPrice: product.currentPrice,
+      discount: 0,
+      discountType: 'fixed',
       totalPrice,
       addOns,
+      // The order line records the variant, which is what HubRise keys on.
+      skuRef: product.skuRef,
+      skuName: product.skuName ?? null,
       images: product.images ?? [],
       image: product.images?.[0] ?? '',
       note: notes || '',
