@@ -83,6 +83,7 @@ function shortLine(a: DeliveryAddress) {
 }
 
 export default function DeliveryAddressModal({ open, onClose, onSelect, googleApiKey, onSuccess }: DeliveryAddressModalProps) {
+  console.log('Googleapikey', googleApiKey);
   const isMobile = useIsMobile();
   const { t } = useLanguage();
   const storeInfo = useStore();
@@ -270,7 +271,10 @@ export default function DeliveryAddressModal({ open, onClose, onSelect, googleAp
         <div className='rounded-2xl border border-border bg-surface-1 px-4 py-4 text-[13.5px] font-semibold text-brand-red'>
           {error === MAPS_AUTH_ERROR ? (t.addressLookupUnavailableSub ?? 'Address search is unavailable right now.') : error}
         </div>
-        <button onClick={onClose} type='button' className='mt-3.5 h-[54px] w-full rounded-[15px] bg-surface-3 text-[14.5px] font-bold text-white transition hover:bg-elevated'>
+        <button
+          onClick={onClose}
+          type='button'
+          className='mt-3.5 h-[54px] w-full rounded-[15px] bg-surface-3 text-[14.5px] font-bold text-white transition hover:bg-elevated'>
           {t.close}
         </button>
       </>
@@ -287,50 +291,48 @@ export default function DeliveryAddressModal({ open, onClose, onSelect, googleAp
     sub = t.addressBookSub;
     body = (
       <div role='radiogroup' aria-label={t.deliveryAddress} className='flex flex-col gap-2.5'>
-          {savedAddresses.map((a) => {
-            const selected = a.id === currentId;
-            return (
-              <div
-                key={a.id}
-                className={cn('flex items-center gap-3 rounded-[14px] border-2 p-3 transition', selected ? 'border-white bg-surface-selected' : 'border-transparent bg-surface-3 hover:bg-elevated')}>
-                <button
-                  type='button'
-                  role='radio'
-                  aria-checked={selected}
-                  onClick={() => select(a)}
-                  className='flex min-w-0 flex-1 items-center gap-3 text-left'>
-                  <span className='flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] bg-card'>
-                    <MapPin className='h-5 w-5' strokeWidth={1.7} />
-                  </span>
-                  <span className='min-w-0 flex-1'>
-                    <span className='block truncate text-[15px] font-bold'>{a.label || shortLine(a)}</span>
-                    <span className='mt-0.5 block truncate text-[12.5px] font-medium text-muted-foreground'>{a.formattedAddress}</span>
-                  </span>
-                  <span className={cn('flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border-2', selected ? 'border-white' : 'border-fg-faint')}>
-                    {selected && <span className='h-[11px] w-[11px] rounded-full bg-white' />}
-                  </span>
-                </button>
-                <button
-                  type='button'
-                  aria-label={t.deleteAddress}
-                  onClick={() => removeSavedAddress(a.id)}
-                  className='flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] text-delete transition hover:bg-[rgba(255,82,71,0.14)]'>
-                  <X className='h-[17px] w-[17px]' strokeWidth={2.2} />
-                </button>
-              </div>
-            );
-          })}
+        {savedAddresses.map((a) => {
+          const selected = a.id === currentId;
+          return (
+            <div
+              key={a.id}
+              className={cn(
+                'flex items-center gap-3 rounded-[14px] border-2 p-3 transition',
+                selected ? 'border-white bg-surface-selected' : 'border-transparent bg-surface-3 hover:bg-elevated'
+              )}>
+              <button type='button' role='radio' aria-checked={selected} onClick={() => select(a)} className='flex min-w-0 flex-1 items-center gap-3 text-left'>
+                <span className='flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] bg-card'>
+                  <MapPin className='h-5 w-5' strokeWidth={1.7} />
+                </span>
+                <span className='min-w-0 flex-1'>
+                  <span className='block truncate text-[15px] font-bold'>{a.label || shortLine(a)}</span>
+                  <span className='mt-0.5 block truncate text-[12.5px] font-medium text-muted-foreground'>{a.formattedAddress}</span>
+                </span>
+                <span className={cn('flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border-2', selected ? 'border-white' : 'border-fg-faint')}>
+                  {selected && <span className='h-[11px] w-[11px] rounded-full bg-white' />}
+                </span>
+              </button>
+              <button
+                type='button'
+                aria-label={t.deleteAddress}
+                onClick={() => removeSavedAddress(a.id)}
+                className='flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] text-delete transition hover:bg-[rgba(255,82,71,0.14)]'>
+                <X className='h-[17px] w-[17px]' strokeWidth={2.2} />
+              </button>
+            </div>
+          );
+        })}
 
-          <button
-            type='button'
-            onClick={() => {
-              resetForm();
-              setMode('form');
-            }}
-            className='mt-1 flex h-[52px] items-center justify-center gap-2.5 rounded-[14px] border-[1.5px] border-dashed border-outline-soft text-[14.5px] font-bold text-white transition hover:border-border-strong hover:bg-surface-hover'>
-            <Plus className='h-[17px] w-[17px]' strokeWidth={2.4} />
-            {t.addNewAddress}
-          </button>
+        <button
+          type='button'
+          onClick={() => {
+            resetForm();
+            setMode('form');
+          }}
+          className='mt-1 flex h-[52px] items-center justify-center gap-2.5 rounded-[14px] border-[1.5px] border-dashed border-outline-soft text-[14.5px] font-bold text-white transition hover:border-border-strong hover:bg-surface-hover'>
+          <Plus className='h-[17px] w-[17px]' strokeWidth={2.4} />
+          {t.addNewAddress}
+        </button>
       </div>
     );
   } else {
@@ -368,7 +370,10 @@ export default function DeliveryAddressModal({ open, onClose, onSelect, googleAp
                   type='button'
                   onClick={() => fetchPlaceDetails(p.place_id)}
                   onMouseEnter={() => setActiveIndex(idx)}
-                  className={cn('flex w-full items-center gap-3 border-b border-white/5 px-4 py-3.5 text-left transition last:border-b-0 hover:bg-surface-suggest', idx === activeIndex && 'bg-surface-suggest')}>
+                  className={cn(
+                    'flex w-full items-center gap-3 border-b border-white/5 px-4 py-3.5 text-left transition last:border-b-0 hover:bg-surface-suggest',
+                    idx === activeIndex && 'bg-surface-suggest'
+                  )}>
                   <span className='flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-card'>
                     <MapPin className='h-4 w-4 text-muted-foreground' strokeWidth={1.8} />
                   </span>

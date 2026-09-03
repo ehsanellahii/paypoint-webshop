@@ -208,7 +208,7 @@ export interface IStoreInfo {
   email: string;
   slug: string;
   logo: string | null;
-  /** Wide photograph behind the menu hero. Not served by the API yet. */
+  /** Wide photograph behind the menu hero. Set per store in the admin panel. */
   coverImage: string | null;
   timings: {
     monday: { open: string; close: string };

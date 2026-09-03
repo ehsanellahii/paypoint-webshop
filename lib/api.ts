@@ -77,8 +77,8 @@ export const getStoreData = cache(async (slug: string, token?: string) => {
     phone: data?.data?.phone,
     email: data?.data?.emailAddress,
     logo: data?.data?.logoFileName ? `${getImageURL(data?.data?.logoFileName)}` : null,
-    // Not in the payload yet — read both plausible names so the screens light
-    // up as soon as one of them ships. See docs/backend-pending.md.
+    // `coverFileName` is read as well as `webShopSettings.coverImage` because
+    // the two endpoints that answer for a store name it differently.
     coverImage: data?.data?.coverFileName || data?.data?.webShopSettings?.coverImage ? `${getImageURL(data?.data?.coverFileName || data?.data?.webShopSettings?.coverImage)}` : null,
     timings: data?.data?.timings || null,
     /*
@@ -190,11 +190,20 @@ export const fetchCartRecommendations = async (adminId: string, storeId: string,
   }
 };
 
-export const fetchMenuData = async (adminId?: string, storeId?: string, apiKey?: string) => {
+/**
+ * The menu, priced for how this order is being placed.
+ *
+ * `orderType` matters whenever the shop prices collection and delivery apart:
+ * the server resolves the prices it sends, so asking without it shows counter
+ * prices on what may become a delivery order. It is part of the URL rather
+ * than a header so Next's fetch cache keeps one entry per order type instead
+ * of serving whichever was fetched first.
+ */
+export const fetchMenuData = async (adminId?: string, storeId?: string, apiKey?: string, orderType?: string) => {
   if (!adminId || !storeId) {
     throw new Error('Admin ID and Store ID are required to fetch menu data.');
   }
-  const API_URL = `${API_BASE_URL}/menu`;
+  const API_URL = orderType ? `${API_BASE_URL}/menu?orderType=${encodeURIComponent(orderType)}` : `${API_BASE_URL}/menu`;
 
   try {
     const response = await fetch(API_URL, {

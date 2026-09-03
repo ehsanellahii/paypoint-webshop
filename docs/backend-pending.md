@@ -15,7 +15,6 @@ The shop is multi-tenant; all of these come from `GET /integration/slugs/:slug`
 
 | Field | Needed by | Today |
 | --- | --- | --- |
-| **`coverImage`** | Menu hero, checkout hero, auth panel | Falls back to `settings.logo` stretched across a 260px banner and dimmed. A logo is a square mark; a hero wants a ~16:6 photograph. **Highest-impact visual fix available.** |
 | **`rating`, `ratingCount`** | Restaurant-info modal, auth hero benefit row | **Hard-coded `4.8` and `820+`** in [`RestaurantInfoModal`](../components/menu/RestaurantInfoModal.tsx) and the auth hero. This is presented to customers as fact — either make it real or drop the row. |
 | **`priceLevel`** (`€`/`€€`/`€€€`) | Restaurant-info modal subtitle | Omitted |
 | **`description`** | Info modal paragraph, hero tagline | Omitted; the hero shows the address instead |

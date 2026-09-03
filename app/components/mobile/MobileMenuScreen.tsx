@@ -34,7 +34,7 @@ export default function MobileMenuScreen() {
   const storeInfo = useStore();
   const { t } = useLanguage();
   const { cart, addToCart, totalItems, totalPrice } = useCart();
-  const { deliveryAddress, setDeliveryAddress, setOrderType } = useAddress();
+  const { orderType, deliveryAddress, setDeliveryAddress, setOrderType } = useAddress();
   const { toProduct, toCart } = useStoreNavigation();
   const { showGate, dismissGate } = useZoneGate();
 
@@ -49,7 +49,7 @@ export default function MobileMenuScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchMenuData(storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey)
+    fetchMenuData(storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey, orderType)
       .then((data) => {
         if (cancelled) return;
         setMenuData(data);
@@ -60,7 +60,9 @@ export default function MobileMenuScreen() {
     return () => {
       cancelled = true;
     };
-  }, [storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey]);
+    // Refetched when the customer switches between collection and delivery:
+    // the prices the server sends depend on it.
+  }, [storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey, orderType]);
 
   const categories = menuData ? getCategories(menuData) : [];
   const q = query.trim().toLowerCase();

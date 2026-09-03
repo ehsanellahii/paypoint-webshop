@@ -254,8 +254,9 @@ it fires exactly once even though the effect may settle several times.
   Those customers show as asterisks in the POS order list, the admin customer
   list and on receipts. Dine-in no longer does this — a table order carries no
   customer at all.
-- **`coverImage` is never populated.** No cover field exists server-side yet;
-  `lib/storeMedia.ts` falls back to the logo. See `docs/backend-pending.md`.
+- **`coverImage` is optional per store.** Uploaded as the web shop banner in
+  the admin panel; `lib/storeMedia.ts` falls back to the logo for a shop that
+  has not set one.
 
 ## 9. File map
 

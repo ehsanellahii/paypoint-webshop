@@ -7,6 +7,7 @@ import MobileShell from '~/components/mobile/MobileShell';
 import { fetchMenuData, formatPrice, getAllProducts } from '~/lib/api';
 import { AddOnGroup, cn, getImageURL, MenuProduct } from '~/lib/utils';
 import SmartImage from '~/lib/SmartImage';
+import { useAddress } from '~/contexts/address-context';
 import { useCart } from '~/contexts/cart-context';
 import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
@@ -22,6 +23,8 @@ export default function MobileProductScreen({ productId }: { productId: string }
   const { t } = useLanguage();
   const storeInfo = useStore();
   const { addToCart } = useCart();
+  // The prices this screen shows depend on how the order is being placed.
+  const { orderType } = useAddress();
   const { back, toMenu } = useStoreNavigation();
 
   const [product, setProduct] = useState<MenuProduct | null>(null);
@@ -37,7 +40,7 @@ export default function MobileProductScreen({ productId }: { productId: string }
 
   useEffect(() => {
     let cancelled = false;
-    fetchMenuData(storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey)
+    fetchMenuData(storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey, orderType)
       .then((data) => {
         if (cancelled) return;
         const found = getAllProducts(data).find((p) => String(p.id) === productId || String(p._id) === productId) ?? null;
@@ -47,7 +50,9 @@ export default function MobileProductScreen({ productId }: { productId: string }
     return () => {
       cancelled = true;
     };
-  }, [productId, storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey]);
+    // Refetched when the customer switches between collection and delivery:
+    // the prices the server sends depend on it.
+  }, [productId, storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey, orderType]);
 
   const groupTotal = (sectionId: string) => Object.values(selected[sectionId] ?? {}).reduce((a, b) => a + b, 0);
 
