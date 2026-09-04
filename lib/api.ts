@@ -226,6 +226,46 @@ export const fetchMenuData = async (adminId?: string, storeId?: string, apiKey?:
   }
 };
 
+export type DeliveryZone = {
+  /** Whether the store delivers here. A store with no zones set delivers everywhere. */
+  isAvailable: boolean;
+  /** False when the store has configured no zones at all. */
+  hasZones: boolean;
+  postalCode: string;
+  deliveryCharges: number | null;
+  minimumOrderAmount: number | null;
+  deliveryTime: number | null;
+  priorityDeliveryCharges: number | null;
+  priorityDeliveryTime: number | null;
+};
+
+/**
+ * Ask the server whether this postal code is in the store's delivery area.
+ *
+ * The browser used to decide this from the rate table shipped with the page,
+ * comparing with a strict `===` against a Number — so a stored code that was a
+ * string, or one with a leading zero, silently read as "outside our delivery
+ * area". The server pads and compares both sides the same way, and it is the
+ * only place that decision is now made.
+ */
+export const checkDeliveryZone = async (
+  adminId: string,
+  storeId: string,
+  apiKey: string,
+  postalCode: string,
+): Promise<DeliveryZone> => {
+  const url = `${API_BASE_URL}/delivery-zone?postalCode=${encodeURIComponent(postalCode)}`;
+  const response = await fetch(url, { headers: apiHeaders({ apiKey, adminId, storeId }) });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message ?? `Delivery zone lookup failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data?.data;
+};
+
 export const loginUser = async (adminId: string, storeId: string, apiKey: string, phoneNumberWithCode: string, name?: string) => {
   const API_URL = `${API_BASE_URL}/user/login`;
   // `name` is optional server-side; sending it updates the stored customer name.
@@ -242,7 +282,16 @@ export const loginUser = async (adminId: string, storeId: string, apiKey: string
     if (!response.ok) {
       const errorData = await response.json();
       console.error('Error response data:', errorData);
-      throw new Error(errorData.message ?? `Login failed: ${response.status}`);
+      const error = new Error(errorData.message ?? `Login failed: ${response.status}`);
+      /*
+       * The status and the server's own code travel with the error. Callers
+       * need to tell "this number has no account yet" apart from "the login
+       * broke", and the message alone is a translated sentence that cannot be
+       * matched on safely.
+       */
+      (error as any).status = response.status;
+      (error as any).errorCode = errorData?.errorCode;
+      throw error;
     }
 
     const data = await response.json();
@@ -250,6 +299,46 @@ export const loginUser = async (adminId: string, storeId: string, apiKey: string
   } catch (error) {
     console.error('Error during login:', error);
     throw error;
+  }
+};
+
+/**
+ * Placeholder name for a customer we have nothing better for.
+ *
+ * `customer.name` is `required: true` on the server, so registration has to
+ * send something. Shared with checkout so the two cannot drift apart.
+ */
+export const CUSTOMER_NAME_PLACEHOLDER = '********';
+
+/**
+ * Sign a customer in, and create the account when the number is new.
+ *
+ * The OTP has already proved the number by the time this runs, so an unknown
+ * one is a first-time customer rather than a failure. `/user/login` answers
+ * those with 404 `CUSTOMER_NOT_FOUND`, which used to surface as "customer not
+ * found" directly under a code the customer had just entered correctly — and
+ * it hit new customers only, which is precisely the wrong half.
+ */
+export const loginOrRegisterUser = async (
+  adminId: string,
+  storeId: string,
+  apiKey: string,
+  phoneNumberWithCode: string,
+  name?: string,
+) => {
+  try {
+    return await loginUser(adminId, storeId, apiKey, phoneNumberWithCode, name);
+  } catch (error: any) {
+    const isUnknownNumber = error?.status === 404 || error?.errorCode === 'CUSTOMER_NOT_FOUND';
+    if (!isUnknownNumber) throw error;
+
+    return await registerUser(
+      adminId,
+      storeId,
+      apiKey,
+      name?.trim() || CUSTOMER_NAME_PLACEHOLDER,
+      phoneNumberWithCode,
+    );
   }
 };
 

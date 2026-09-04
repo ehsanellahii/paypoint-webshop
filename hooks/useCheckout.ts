@@ -10,7 +10,7 @@ import { useUser } from '~/contexts/user-context';
 import { useLanguage } from '~/contexts/language-context';
 import { useStoreNavigation } from '~/hooks/useStoreNavigation';
 
-import { API_BASE_URL, apiHeaders, createPaymentIntent, createUnconfirmedOrder, formatPrice } from '~/lib/api';
+import { API_BASE_URL, apiHeaders, createPaymentIntent, createUnconfirmedOrder, CUSTOMER_NAME_PLACEHOLDER, formatPrice } from '~/lib/api';
 import { formatCartItemsForOrder, getImageURL, getPostalRateInfo, storage } from '~/lib/utils';
 import type { PreorderSlot } from '~/components/menu/PreorderModal';
 import { ORDER_PAYMENT_METHOD, type PaymentMethod } from '~/components/checkout/PaymentSheet';
@@ -31,11 +31,9 @@ export const TIP_VALUES = [0, 1, 2, 3];
  * twice, or the two will drift and only one will be tested.
  */
 /*
- * Checkout collects no name, but `customer.name` is `required: true` on the
- * server and its login service throws without one — so something has to be
- * sent. Only used when we genuinely have nothing better.
+ * `CUSTOMER_NAME_PLACEHOLDER` lives in lib/api.ts, so checkout and
+ * registration send the same one.
  */
-const CUSTOMER_NAME_PLACEHOLDER = '********';
 
 /** Any run of asterisks: ours, or the shorter one the HubRise import uses. */
 const isPlaceholderName = (name?: string | null) =>
@@ -265,14 +263,21 @@ export function useCheckout() {
     if (!canPlace || placing) return;
 
     /*
-     * A dine-in order is placed at the table, so the guest is already physically
-     * accountable and we ask for nothing. Everyone else must have proved their
-     * number or email before an order is created.
+     * Phone verification is switched off for now, so checkout asks nobody to
+     * prove their number and every order goes straight through.
+     *
+     * Off by choice, not because it is broken: the "customer not found" it
+     * used to fail with is fixed — `loginOrRegisterUser` now creates the
+     * account when the verified number is new. Uncommenting the three lines
+     * below is the whole way back.
+     *
+     * Dine-in never asked in the first place: the guest is at a table, and the
+     * order carries no customer.
      */
-    if (!isDineIn && !user?.isVerified) {
-      setVerifyOpen(true);
-      return;
-    }
+    // if (!isDineIn && !user?.isVerified) {
+    //   setVerifyOpen(true);
+    //   return;
+    // }
 
     setPlacing(true);
     try {

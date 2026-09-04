@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog } from '@base-ui/react/dialog';
 import { AlertCircle, Loader2, MapPin, Phone, Plus, Search, X } from 'lucide-react';
-import { cn, getPostalRateInfo } from '~/lib/utils';
+import { cn } from '~/lib/utils';
+import { checkDeliveryZone, type DeliveryZone } from '~/lib/api';
 import { isKeyRefused, MAPS_AUTH_ERROR, useGoogleMaps } from '~/hooks/useGoogleMaps';
 import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
@@ -110,10 +111,74 @@ export default function DeliveryAddressModal({ open, onClose, onSelect, googleAp
 
   const LABELS = useMemo(() => [t.labelHome, t.labelWork, t.labelOther], [t]);
 
-  // A store with no postal rates at all has no delivery zone to fail — treating
-  // "no rates configured" as "out of area" would reject every address.
-  const hasZones = (storeInfo?.postalRates?.length ?? 0) > 0;
-  const outOfZone = !!picked && hasZones && !getPostalRateInfo(Number(picked.postalCode || 0), storeInfo?.postalRates || []).isAvailable;
+  /*
+   * The delivery area is decided by the server, against the postal code.
+   *
+   * It used to be decided here, from the rate table shipped with the page, with
+   * a strict `===` against a Number — so a stored code that happened to be a
+   * string, or one with a leading zero (01067 Dresden, 04109 Leipzig), read as
+   * "outside our delivery area" for an address plainly inside it. One
+   * comparison, in one place, on data that cannot be stale.
+   */
+  const [zone, setZone] = useState<DeliveryZone | null>(null);
+  const [zoneChecking, setZoneChecking] = useState(false);
+
+  useEffect(() => {
+    if (!picked) {
+      setZone(null);
+      return;
+    }
+
+    const postalCode = picked.postalCode?.trim();
+    console.log('[delivery zone] checking', {
+      address: picked.formattedAddress,
+      postalCode,
+      lat: picked.lat,
+      lng: picked.lng,
+    });
+
+    // Google gave no postcode for this pick, so there is nothing to ask about.
+    // Treated as unknown rather than rejected: the address itself is still
+    // incomplete, and validateAddress already says so.
+    if (!postalCode) {
+      setZone(null);
+      return;
+    }
+
+    let cancelled = false;
+    setZoneChecking(true);
+
+    checkDeliveryZone(storeInfo?.adminId || '', storeInfo?.storeId || '', storeInfo?.apiKey || '', postalCode)
+      .then((result) => {
+        if (cancelled) return;
+        // `result.postalCode` is the padded form the server matched on.
+        console.log('[delivery zone] result', { requested: postalCode, ...result });
+        setZone(result);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        /*
+         * A lookup that could not run must not turn into a rejection: refusing
+         * the sale because our own call failed is the worse of the two
+         * mistakes, and this is the only gate — order creation does not check
+         * the zone again. So a store outage lets a few out-of-area addresses
+         * through, which the kitchen sees and can phone about.
+         */
+        console.error('[delivery zone] lookup failed, letting the address through', error);
+        setZone(null);
+      })
+      .finally(() => {
+        if (!cancelled) setZoneChecking(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [picked, storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey]);
+
+  // Only once there is an answer. While the call is in flight the panel stays
+  // hidden, so a valid address never flashes "outside our delivery area".
+  const outOfZone = !!picked && !!zone && !zone.isAvailable;
 
   const resetForm = () => {
     setQuery('');
@@ -251,7 +316,7 @@ export default function DeliveryAddressModal({ open, onClose, onSelect, googleAp
 
   /* ------------------------------------------------------------------ views */
 
-  const canSave = !!picked && !outOfZone;
+  const canSave = !!picked && !outOfZone && !zoneChecking;
   const currentId = deliveryAddress?.placeId || deliveryAddress?.formattedAddress;
 
   /*

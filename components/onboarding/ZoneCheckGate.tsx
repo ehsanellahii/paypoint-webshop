@@ -8,9 +8,9 @@ import { useIsMobile } from '~/contexts/device-context';
 import { useStore } from '~/contexts/store-context';
 import { useAddress, type DeliveryAddress } from '~/contexts/address-context';
 import { useLanguage } from '~/contexts/language-context';
-import { cn, getPostalRateInfo } from '~/lib/utils';
+import { cn } from '~/lib/utils';
 import { getStoreCover } from '~/lib/storeMedia';
-import { formatPrice } from '@/lib/api';
+import { checkDeliveryZone, formatPrice } from '@/lib/api';
 
 function parseAddress(place: google.maps.places.PlaceResult | google.maps.GeocoderResult): DeliveryAddress {
   const comps = place.address_components ?? [];
@@ -128,21 +128,72 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
     return () => window.clearTimeout(handle);
   }, [query, loaded]);
 
-  const checkAddress = (address: DeliveryAddress) => {
+  /*
+   * The delivery area is decided by the server, against the postal code.
+   *
+   * It used to be decided here, from the rate table shipped with the page, by
+   * a strict `===` against a Number — which said no to a stored code that
+   * happened to be a string, and to every code with a leading zero (01067
+   * Dresden, 04109 Leipzig). Worse in this component than in the address
+   * dialog, because there was no "store has no zones configured" guard either:
+   * a store that had never filled the table in refused every address, and this
+   * gate stands in front of the whole menu.
+   */
+  const checkAddress = async (address: DeliveryAddress) => {
     // Every path into a result ends here, so this is the one place that has to
     // close the dropdown — including "check" pressed with the list still open.
     setPredictions([]);
-    const rate = getPostalRateInfo(Number(address.postalCode || 0), storeInfo?.postalRates || []);
-    setResult(
-      rate.isAvailable
-        ? {
-            status: 'ok',
-            address,
-            min: rate.minimumOrderAmount,
-            fee: rate.deliveryCharges,
-          }
-        : { status: 'no', address },
-    );
+
+    const postalCode = address.postalCode?.trim();
+    console.log('[delivery zone] checking', {
+      address: address.formattedAddress,
+      postalCode,
+      lat: address.lat,
+      lng: address.lng,
+    });
+
+    setChecking(true);
+    try {
+      /*
+       * No postcode on the resolved address means there is nothing to ask
+       * about. Left undecided rather than refused: an imprecise Google pick —
+       * a city, a landmark — would otherwise read as "outside our area".
+       */
+      if (!postalCode) {
+        setResult(null);
+        return;
+      }
+
+      const zone = await checkDeliveryZone(
+        storeInfo?.adminId || '',
+        storeInfo?.storeId || '',
+        storeInfo?.apiKey || '',
+        postalCode,
+      );
+      // `zone.postalCode` is the padded form the server matched on.
+      console.log('[delivery zone] result', { requested: postalCode, ...zone });
+
+      setResult(
+        zone.isAvailable
+          ? {
+              status: 'ok',
+              address,
+              min: zone.minimumOrderAmount,
+              fee: zone.deliveryCharges,
+            }
+          : { status: 'no', address },
+      );
+    } catch (error) {
+      /*
+       * Let them through rather than refuse over our own outage. This gate is
+       * in front of the entire menu, so a failed lookup that answered "no"
+       * would close the shop.
+       */
+      console.error('[delivery zone] lookup failed, letting the address through', error);
+      setResult({ status: 'ok', address, min: null, fee: null });
+    } finally {
+      setChecking(false);
+    }
   };
 
   const pickPrediction = (placeId: string, label: string) => {
@@ -159,7 +210,7 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
       (place, status) => {
         if (isKeyRefused(status)) setLookupError(MAPS_AUTH_ERROR);
         if (status !== google.maps.places.PlacesServiceStatus.OK || !place) return;
-        checkAddress(parseAddress(place));
+        void checkAddress(parseAddress(place));
       },
     );
   };
@@ -174,7 +225,7 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
           const addr = parseAddress(results[0]);
           autofilled.current = addr.formattedAddress;
           setQuery(addr.formattedAddress);
-          checkAddress(addr);
+          void checkAddress(addr);
         }
       });
     });
@@ -195,7 +246,6 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
     setChecking(true);
     const geocoder = new google.maps.Geocoder();
     geocoder.geocode({ address: typed }, (results, status) => {
-      setChecking(false);
       if (isKeyRefused(status)) setLookupError(MAPS_AUTH_ERROR);
       /*
        * Only decide when we actually resolved an address. A geocode that finds
@@ -203,8 +253,12 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
        * area" there would turn a typo into a lost order.
        */
       if (status === 'OK' && results && results[0]) {
-        checkAddress(parseAddress(results[0]));
+        // checkAddress owns the flag from here, so the button does not blink
+        // between the geocode and the zone lookup.
+        void checkAddress(parseAddress(results[0]));
+        return;
       }
+      setChecking(false);
     });
   };
 
@@ -323,9 +377,15 @@ function DesktopZonePanel({
 }: ZoneViewProps) {
   return (
     <div className='fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto bg-background p-6'>
-      <div className='anim-fade grid w-full max-w-[1060px] grid-cols-1 overflow-hidden rounded-[28px] border border-border bg-card shadow-[0_40px_90px_-30px_rgba(0,0,0,0.8)] md:grid-cols-[1.05fr_1fr]'>
+      {/*
+        No `overflow-hidden` here: it clipped the address suggestions, which are
+        absolutely positioned and taller than the space left below the input.
+        The rounding it provided is now the hero's own — that image is the only
+        child that would otherwise square off the corners.
+      */}
+      <div className='anim-fade grid w-full max-w-[1060px] grid-cols-1 rounded-[28px] border border-border bg-card shadow-[0_40px_90px_-30px_rgba(0,0,0,0.8)] md:grid-cols-[1.05fr_1fr]'>
         {/* Left hero */}
-        <div className='relative hidden min-h-[580px] flex-col justify-between overflow-hidden p-11 md:flex'>
+        <div className='relative hidden min-h-[580px] flex-col justify-between overflow-hidden rounded-l-[28px] p-11 md:flex'>
           <div
             className='absolute inset-0 bg-[#0f0f11] bg-top bg-no-repeat'
             style={cover ? { backgroundImage: `url("${cover}")`, backgroundSize: '100% auto' } : undefined}
@@ -390,8 +450,9 @@ function DesktopZonePanel({
               />
               {loading && <Loader2 className='h-4 w-4 animate-spin text-muted-foreground' />}
             </div>
+            {/* Scrolls in place rather than growing past the panel. */}
             {predictions.length > 0 && (
-              <div className='absolute inset-x-0 top-full z-[6] mt-2 overflow-hidden rounded-[15px] border border-border bg-surface-2 shadow-[0_18px_40px_-12px_rgba(0,0,0,0.7)]'>
+              <div className='absolute inset-x-0 top-full z-[6] mt-2 max-h-[268px] overflow-y-auto overscroll-contain rounded-[15px] border border-border bg-surface-2 shadow-[0_18px_40px_-12px_rgba(0,0,0,0.7)]'>
                 {predictions.slice(0, 5).map((p) => (
                   <button
                     key={p.place_id}
@@ -595,8 +656,9 @@ function MobileZoneScreen({
               />
               {loading && <Loader2 className='h-4 w-4 animate-spin text-muted-foreground' />}
             </div>
+            {/* Scrolls in place rather than growing past the screen. */}
             {predictions.length > 0 && (
-              <div className='absolute inset-x-0 top-full z-[7] mt-2 overflow-hidden rounded-[15px] border border-border bg-surface-1 shadow-[0_18px_40px_-12px_rgba(0,0,0,0.7)]'>
+              <div className='absolute inset-x-0 top-full z-[7] mt-2 max-h-[268px] overflow-y-auto overscroll-contain rounded-[15px] border border-border bg-surface-1 shadow-[0_18px_40px_-12px_rgba(0,0,0,0.7)]'>
                 {predictions.slice(0, 5).map((p) => (
                   <button
                     key={p.place_id}

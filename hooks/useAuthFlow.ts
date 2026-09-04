@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { appleProvider, auth, googleProvider } from '~/lib/firebase';
 
 import { RecaptchaVerifier, signInWithPhoneNumber, signInWithPopup, type ConfirmationResult } from 'firebase/auth';
-import { loginUser, loginUserWithProvider, registerUser, syncFavorites } from '~/lib/api';
+import { loginOrRegisterUser, loginUserWithProvider, registerUser, syncFavorites } from '~/lib/api';
 import { useStore } from '~/contexts/store-context';
 import { useUser } from '~/contexts/user-context';
 import { getFavoriteIds, setFavoritesFromIds } from '~/lib/favorites';
@@ -278,7 +278,9 @@ export function useAuthFlow({
       if (isRegistration) {
         user = await registerUser(adminId, storeId, apiKey, (formData as RegistrationFormValues).customerName.trim(), normalizedPhone);
       } else {
-        user = await loginUser(adminId, storeId, apiKey, normalizedPhone, formData.customerName?.trim());
+        // Signing in and registering are the same errand here: the OTP just
+        // proved the number, so an unknown one means a first-time customer.
+        user = await loginOrRegisterUser(adminId, storeId, apiKey, normalizedPhone, formData.customerName?.trim());
       }
       handleOpenChange(false);
       if (user) setUser(user);
