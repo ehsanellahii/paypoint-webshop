@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { getStoreData } from '~/lib/api';
 import { getDevice } from '~/lib/device';
+import { getStoreBase } from '~/lib/storeBase';
 import StoreProvider from '~/contexts/store-context';
 import ThemeVars from '~/lib/ThemeVars';
 import MobileAccountScreen from '~/app/components/mobile/MobileAccountScreen';
@@ -18,7 +19,10 @@ export default async function AccountPage({ params, searchParams }: { params: Pr
   if (!ACCOUNT_SECTIONS.includes(section as AccountSection)) notFound();
 
   const device = await getDevice();
-  if (device !== 'mobile') redirect(token ? `/${slug}?t=${token}` : `/${slug}`);
+  // The menu's own address, which is the bare domain when the store is served
+  // on one — `/${slug}` there would only bounce back through the proxy.
+  const base = await getStoreBase(slug);
+  if (device !== 'mobile') redirect(token ? `${base || '/'}?t=${token}` : base || '/');
 
   const storeInfo = await getStoreData(slug, token as string);
   if (!storeInfo) notFound();

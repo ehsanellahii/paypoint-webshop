@@ -1,5 +1,7 @@
 import { headers } from 'next/headers';
 
+import { DEVICE_HEADER } from './requestHeaders';
+
 export type Device = 'mobile' | 'desktop';
 
 /**
@@ -13,5 +15,5 @@ export type Device = 'mobile' | 'desktop';
  */
 export async function getDevice(): Promise<Device> {
   const h = await headers();
-  return h.get('x-device') === 'mobile' ? 'mobile' : 'desktop';
+  return h.get(DEVICE_HEADER) === 'mobile' ? 'mobile' : 'desktop';
 }

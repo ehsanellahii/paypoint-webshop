@@ -1,7 +1,9 @@
 import { cache } from 'react';
 import { getImageURL, IMenuData, MenuCategory, MenuProduct } from './utils';
 
-export const API_BASE_URL = process.env.NODE_ENV === 'production' ? 'https://api.paypointpos.de/integration' : 'http://localhost:4000/integration';
+import { API_BASE_URL } from './apiBase';
+
+export { API_BASE_URL };
 /** Payments and Connect live outside the /integration mount. */
 export const PAYMENTS_BASE_URL = API_BASE_URL.replace(/\/integration$/, '/payments');
 export const PAYMENT_API_KEY = process.env.NEXT_PUBLIC_PAYMENT_API_KEY ?? '';
@@ -89,6 +91,12 @@ export const getStoreData = cache(async (slug: string, token?: string) => {
      */
     stripeChargesEnabled: !!data?.data?.stripeChargesEnabled,
     slug: slug,
+    /*
+     * The store's own hostname, when it has one. Present even when the guest
+     * arrived on the platform host — that is exactly the case where the
+     * canonical URL has to point somewhere other than the current address.
+     */
+    customDomain: data?.data?.customDomain || null,
     settings: data?.data?.webShopSettings
       ? {
           ...data?.data?.webShopSettings,

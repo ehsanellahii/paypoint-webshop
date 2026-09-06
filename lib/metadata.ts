@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 
 import type { IStoreInfo } from './types';
+import { getStoreBase } from './storeBase';
 
 /**
  * Absolute origin of the current request.
@@ -39,7 +40,19 @@ type BuildArgs = {
  */
 export async function buildStoreMetadata({ store, slug, path = '', title }: BuildArgs): Promise<Metadata> {
   const origin = await requestOrigin();
-  const url = `${origin}/${slug}${path}`;
+  // '' on the restaurant's own domain, '/<slug>' on ours.
+  const base = await getStoreBase(slug);
+  const url = `${origin}${base}${path}`;
+
+  /*
+   * A store on its own domain is reachable at two addresses — its domain and
+   * the platform host it is still served from — and search engines treat that
+   * as two competing copies of one page. The canonical always names the
+   * restaurant's domain when it has one, so the branded address is the one
+   * that gets indexed and the one a shared link shows, whichever the guest
+   * happened to arrive on.
+   */
+  const canonical = store?.customDomain ? `https://${store.customDomain}${path}` : url;
 
   const brand = store?.brandName?.trim() || 'Online Ordering';
   const city = store?.city?.trim();
@@ -63,13 +76,13 @@ export async function buildStoreMetadata({ store, slug, path = '', title }: Buil
     // brand a second time.
     title: { absolute: heading },
     description,
-    alternates: { canonical: url },
+    alternates: { canonical },
     openGraph: {
       type: 'website',
       siteName: brand,
       title: heading,
       description,
-      url,
+      url: canonical,
       locale: 'de_DE',
       images: [{ url: image, alt: brand }],
     },

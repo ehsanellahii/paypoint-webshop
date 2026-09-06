@@ -52,7 +52,7 @@ function FieldError({ message }: { message?: string }) {
  */
 export default function MobileCheckoutScreen() {
   const c = useCheckout();
-  const { back, toAccount } = useStoreNavigation();
+  const { back, toAccount, base } = useStoreNavigation();
   const { t } = c;
 
   const logo = c.storeInfo?.settings?.logo || c.storeInfo?.logo || '';
@@ -410,7 +410,7 @@ export default function MobileCheckoutScreen() {
           stripeAccountId={c.payNow.stripeAccountId}
           amount={c.payNow.amount}
           method={c.payNow.method}
-          returnUrl={typeof window !== 'undefined' ? `${window.location.origin}/${c.storeInfo?.slug ?? ''}/confirmation?order=${c.payNow.orderId}` : ''}
+          returnUrl={typeof window !== 'undefined' ? `${window.location.origin}${base}/confirmation?order=${c.payNow.orderId}` : ''}
         />
       )}
 

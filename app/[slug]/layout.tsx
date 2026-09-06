@@ -8,6 +8,8 @@ import { UserProvider } from '~/contexts/user-context';
 import DebugPersistError from '~/lib/DebugPersistError';
 import { getDevice } from '~/lib/device';
 import { DeviceProvider } from '~/contexts/device-context';
+import { getStoreBase } from '~/lib/storeBase';
+import { StoreBaseProvider } from '~/contexts/store-base-context';
 
 const inter = Inter({
   variable: '--font-inter',
@@ -90,6 +92,9 @@ export default async function RootLayout({ children, params }: { children: React
   // so the mobile palette in globals.css can scope to it, and passed through
   // context so client components can pick their tree.
   const device = await getDevice();
+  // '' on the restaurant's own domain, '/<slug>' on ours. Every link and
+  // redirect the app emits hangs off this; routing is already decided.
+  const storeBase = await getStoreBase(slug);
   return (
     <html lang='en' className='dark' data-device={device}>
       {/*
@@ -107,6 +112,7 @@ export default async function RootLayout({ children, params }: { children: React
          * also downloaded the SDK on the menu page, which never draws a map.
          */}
         <DeviceProvider device={device}>
+          <StoreBaseProvider base={storeBase}>
           <LanguageProvider>
           <UserProvider>
             <AddressProvider storeKey={slug || 'default'}>
@@ -115,6 +121,7 @@ export default async function RootLayout({ children, params }: { children: React
             </AddressProvider>
           </UserProvider>
           </LanguageProvider>
+          </StoreBaseProvider>
         </DeviceProvider>
       </body>
     </html>

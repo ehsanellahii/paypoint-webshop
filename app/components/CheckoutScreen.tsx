@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Bike, ShoppingBag, MapPin, Zap, Check, Clock, Pencil, Ticket, Heart, Loader2, AlertCircle, CreditCard, Bell, Mail, Phone, User } from 'lucide-react';
 
 import { useCheckout, TIP_VALUES } from '~/hooks/useCheckout';
+import { useStoreNavigation } from '~/hooks/useStoreNavigation';
 import { formatPrice } from '~/lib/api';
 
 import { cn, formatEtaRange } from '~/lib/utils';
@@ -77,6 +78,10 @@ export default function CheckoutScreen() {
     touched, placing, submitError, emailValid, phoneValid,
     placeLabel, placeHint, canPlace, placeOrder, payNow, setPayNow, verifyOpen, setVerifyOpen,
   } = useCheckout();
+
+  // Stripe needs an absolute return address, so this screen builds one path by
+  // hand — from the same prefix every in-app link uses.
+  const { base } = useStoreNavigation();
 
   const [accountOpen, setAccountOpen] = useState(false);
 
@@ -455,7 +460,7 @@ export default function CheckoutScreen() {
           stripeAccountId={payNow.stripeAccountId}
           amount={payNow.amount}
           method={payNow.method}
-          returnUrl={typeof window !== 'undefined' ? `${window.location.origin}/${storeInfo?.slug ?? ''}/confirmation?order=${payNow.orderId}` : ''}
+          returnUrl={typeof window !== 'undefined' ? `${window.location.origin}${base}/confirmation?order=${payNow.orderId}` : ''}
         />
       )}
 

@@ -1,5 +1,13 @@
 import Link from 'next/link';
 
+/*
+ * Where "More information" goes. Configured rather than written in: this
+ * deployment serves every restaurant, so the one address that is always
+ * correct here is the platform's own. The template shipped a placeholder that
+ * would have gone to a dead host in production.
+ */
+const PLATFORM_URL = process.env.NEXT_PUBLIC_PLATFORM_URL || 'https://paypointpos.de';
+
 export default function NotFound() {
   return (
     <main
@@ -72,7 +80,7 @@ export default function NotFound() {
             flexWrap: 'wrap',
           }}>
           <Link
-            href='https://YOUR-MAIN-WEBSITE.COM'
+            href={PLATFORM_URL}
             style={{
               padding: '12px 18px',
               borderRadius: 12,

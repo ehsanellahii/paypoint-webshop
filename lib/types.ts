@@ -207,6 +207,13 @@ export interface IStoreInfo {
   phone: string;
   email: string;
   slug: string;
+  /**
+   * The restaurant's own hostname when they are served on one, e.g. their own
+   * domain rather than a slug under ours. Null for the great majority of
+   * stores. Only the canonical and share URLs read it — routing is settled in
+   * `proxy.ts` before the page runs.
+   */
+  customDomain: string | null;
   logo: string | null;
   /** Wide photograph behind the menu hero. Set per store in the admin panel. */
   coverImage: string | null;
