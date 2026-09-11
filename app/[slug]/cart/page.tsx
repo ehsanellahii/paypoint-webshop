@@ -5,6 +5,24 @@ import { getStoreBase } from '~/lib/storeBase';
 import StoreProvider from '~/contexts/store-context';
 import ThemeVars from '~/lib/ThemeVars';
 import MobileCartScreen from '~/app/components/mobile/MobileCartScreen';
+import { buildStoreMetadata } from '~/lib/metadata';
+import type { Metadata } from 'next';
+
+/*
+ * Declared so the tab keeps the restaurant's own logo and name here. Metadata
+ * resolves per route, so a page without this inherits the layout's platform
+ * mark — the icon would flip back the moment the guest opened the cart.
+ */
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const store = await getStoreData(slug);
+  return buildStoreMetadata({
+    store,
+    slug,
+    path: '/cart',
+    title: store?.brandName ? `Cart | ${store.brandName}` : 'Cart',
+  });
+}
 
 /*
  * The cart is a full screen on mobile and a modal on desktop, so this route

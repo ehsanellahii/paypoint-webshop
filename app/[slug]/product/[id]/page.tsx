@@ -5,6 +5,20 @@ import { getStoreBase } from '~/lib/storeBase';
 import StoreProvider from '~/contexts/store-context';
 import ThemeVars from '~/lib/ThemeVars';
 import MobileProductScreen from '~/app/components/mobile/MobileProductScreen';
+import { buildStoreMetadata } from '~/lib/metadata';
+import type { Metadata } from 'next';
+
+/*
+ * Store-level only: the product name would mean fetching the menu just to
+ * title the tab, and this screen is reached from the menu rather than shared
+ * on its own. The point here is the restaurant's logo in the tab, which the
+ * layout's fallback would otherwise take back on this route.
+ */
+export async function generateMetadata({ params }: { params: Promise<{ slug: string; id: string }> }): Promise<Metadata> {
+  const { slug, id } = await params;
+  const store = await getStoreData(slug);
+  return buildStoreMetadata({ store, slug, path: `/product/${id}` });
+}
 
 /*
  * Product detail exists as a route only on mobile, where the design makes it a

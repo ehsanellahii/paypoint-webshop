@@ -6,6 +6,31 @@ import StoreProvider from '~/contexts/store-context';
 import ThemeVars from '~/lib/ThemeVars';
 import MobileAccountScreen from '~/app/components/mobile/MobileAccountScreen';
 import { ACCOUNT_SECTIONS, type AccountSection } from '~/lib/accountSections';
+import { buildStoreMetadata } from '~/lib/metadata';
+import type { Metadata } from 'next';
+
+/** Tab headings for the sections; the screens themselves are translated. */
+const SECTION_TITLES: Record<AccountSection, string> = {
+  favorites: 'Favorites',
+  orders: 'Orders',
+  vouchers: 'Vouchers',
+};
+
+/*
+ * Keeps the restaurant's logo in the tab on these screens too — metadata
+ * resolves per route, so without this the layout's platform mark wins here.
+ */
+export async function generateMetadata({ params }: { params: Promise<{ slug: string; section: string }> }): Promise<Metadata> {
+  const { slug, section } = await params;
+  const store = await getStoreData(slug);
+  const label = SECTION_TITLES[section as AccountSection];
+  return buildStoreMetadata({
+    store,
+    slug,
+    path: `/account/${section}`,
+    title: label && store?.brandName ? `${label} | ${store.brandName}` : label,
+  });
+}
 
 /*
  * Favorites, orders, vouchers and invite are top-level screens on mobile and

@@ -9,6 +9,7 @@ import DebugPersistError from '~/lib/DebugPersistError';
 import { getDevice } from '~/lib/device';
 import { DeviceProvider } from '~/contexts/device-context';
 import { getStoreBase } from '~/lib/storeBase';
+import { FALLBACK_ICONS } from '~/lib/metadata';
 import { StoreBaseProvider } from '~/contexts/store-base-context';
 
 const inter = Inter({
@@ -56,16 +57,16 @@ const playfair = Playfair_Display({
  * data" whenever a browser asked for /favicon.ico, which has no file and lands
  * on this route. What is left is only the fallback for a request that never
  * reaches a page.
+ *
+ * The icons here are therefore our own mark only. Every page below replaces
+ * them with the restaurant's logo through `buildStoreMetadata`, which is why
+ * each route under this layout has to declare metadata — without it the tab
+ * falls back to the platform mark on that route alone.
  */
 export const metadata: Metadata = {
   title: 'Online Ordering',
   description: 'Order food online',
-  icons: {
-    icon: [
-      { url: '/logo-light.svg', media: '(prefers-color-scheme: light)' },
-      { url: '/logo-dark.svg', media: '(prefers-color-scheme: dark)' },
-    ],
-  },
+  icons: FALLBACK_ICONS,
 };
 
 export const viewport: Viewport = {
