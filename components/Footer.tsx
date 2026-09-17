@@ -34,10 +34,18 @@ export default function Footer() {
 
           {/* Legal Links + Copyright - Right */}
           <div className='text-center text-muted-foreground md:text-right'>
-            <a href='https://byonesix.com/t-c-privacy-statement' className='mr-4 transition hover:text-white hover:underline'>
+            <a
+              href='https://get-paypoint.de/agb'
+              target='_blank'
+              rel='noopener noreferrer'
+              className='mr-4 transition hover:text-white hover:underline'>
               {t.termAndConditions}
             </a>
-            <a href='https://byonesix.com/t-c-privacy-statement' className='mr-4 transition hover:text-white hover:underline'>
+            <a
+              href='https://get-paypoint.de/privacy'
+              target='_blank'
+              rel='noopener noreferrer'
+              className='mr-4 transition hover:text-white hover:underline'>
               {t.privacyPolicy}
             </a>
             <span>© PayPoint POS UG</span>

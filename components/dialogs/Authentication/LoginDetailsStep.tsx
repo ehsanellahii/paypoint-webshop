@@ -159,11 +159,11 @@ export default function LoginDetailsStep({ loading, values, errors, onChange, on
 
       <p className='mt-[22px] text-xs font-medium leading-relaxed text-muted-foreground-2'>
         {t.legalNoticePrefix}{' '}
-        <a href='https://byonesix.com/t-c-privacy-statement' target='_blank' rel='noopener noreferrer' className='font-semibold text-[#5b9dff]'>
+        <a href='https://get-paypoint.de/agb' target='_blank' rel='noopener noreferrer' className='font-semibold text-[#5b9dff]'>
           {t.termAndConditions}
         </a>{' '}
         {t.legalNoticeAnd}{' '}
-        <a href='https://byonesix.com/t-c-privacy-statement' target='_blank' rel='noopener noreferrer' className='font-semibold text-[#5b9dff]'>
+        <a href='https://get-paypoint.de/privacy' target='_blank' rel='noopener noreferrer' className='font-semibold text-[#5b9dff]'>
           {t.privacyPolicy}
         </a>
         .
