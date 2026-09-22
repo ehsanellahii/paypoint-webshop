@@ -69,7 +69,7 @@ export default function CheckoutScreen() {
     isDineIn, isDelivery, isPickup,
     deliveryCharges, deliveryTime, priorityCharge, priorityTime, priorityAvailable,
     priorityFee, grandTotal, isScheduled,
-    customerName, phoneNumber, setPhoneNumber,
+    customerName, setCustomerName, typedName, phoneNumber, setPhoneNumber,
     bellName, setBellName, driverNote, setDriverNote,
     timing, scheduledSlot, chooseTiming, confirmSchedule,
     paymentMethod, setPaymentMethod, tip, setTip,
@@ -230,6 +230,13 @@ export default function CheckoutScreen() {
             */}
             {isPickup && (
               <>
+                {/* The name to call out when the bag is ready — delivery gets
+                    the same thing from the bell name below. */}
+                <FieldRow icon={User} invalid={touched && !customerName.trim()}>
+                  <input value={customerName} onChange={(e) => setCustomerName(e.target.value)} aria-label={t.yourName} placeholder={t.yourName} disabled={placing} className={rowInput} />
+                </FieldRow>
+                <FieldError message={touched && !customerName.trim() ? t.nameRequired : undefined} />
+
                 <FieldRow icon={Phone} invalid={touched && (!phoneNumber.trim() || !phoneValid)}>
                   <input value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} type='tel' aria-label={t.phoneForQuestions ?? t.phoneNumber} placeholder={t.phoneForQuestions ?? t.phoneNumber} disabled={placing} className={rowInput} />
                 </FieldRow>
@@ -468,7 +475,7 @@ export default function CheckoutScreen() {
         Verification gate: its own dialog, seeded with the number already typed
         above, rather than the sign-in menu.
       */}
-      <PhoneVerifyDialog open={verifyOpen} onClose={() => setVerifyOpen(false)} phone={phoneNumber} name={customerName} />
+      <PhoneVerifyDialog open={verifyOpen} onClose={() => setVerifyOpen(false)} phone={phoneNumber} name={typedName} />
 
       <VoucherFlash />
 

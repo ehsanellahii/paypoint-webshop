@@ -38,22 +38,22 @@ export const TIP_VALUES = [0, 1, 2, 3];
  * registration send the same one.
  */
 
-/** Any run of asterisks: ours, or the shorter one the HubRise import uses. */
-const isPlaceholderName = (name?: string | null) =>
-  !name || /^\*+$/.test(name.trim());
-
 /**
- * The name to put on an order.
+ * A name that says nothing: blank, or a run of asterisks.
  *
- * The customer has verified before this runs, so a registered one already has
- * their real name on the account — sending the placeholder anyway threw that
- * away and put asterisks on the receipt, the POS ticket and the admin customer
- * list. The placeholder is now the fallback it was meant to be.
+ * Ours is eight, the server's own fallback six and the HubRise import's five,
+ * so the shape is matched rather than any one spelling — an account first
+ * created by a marketplace order reads as nameless here, which is what lets the
+ * name typed at checkout fill it in.
  */
-const resolveCustomerName = (accountName?: string | null) =>
-  isPlaceholderName(accountName)
-    ? CUSTOMER_NAME_PLACEHOLDER
-    : (accountName as string).trim();
+const isPlaceholderName = (name?: string | null) =>
+  !name || !name.trim() || /^\*+$/.test(name.trim());
+
+/** The first of these that is a real name, or the placeholder if none is. */
+const firstRealName = (...candidates: (string | null | undefined)[]) => {
+  const found = candidates.find((c) => !isPlaceholderName(c));
+  return found ? found.trim() : CUSTOMER_NAME_PLACEHOLDER;
+};
 
 /**
  * Methods settled online, before the order is placed. Cash and the EC reader
@@ -167,13 +167,28 @@ export function useCheckout() {
   /*
    * What each order type has to ask for:
    *   delivery — bell name and a callback number, nothing else;
-   *   pickup   — a number to call when it is ready;
+   *   pickup   — a name to call out and a number to call when it is ready;
    *   dine-in  — nothing. The table identifies the order.
    */
+  if (isPickup && !customerName.trim()) missing.push(t.yourName ?? 'Your name');
   if (!isDineIn && (!phoneNumber.trim() || !phoneValid)) missing.push(isDelivery ? (t.callbackNumberShort ?? t.phoneNumber) : t.phoneNumber);
   if (isDelivery && !deliveryAddress) missing.push(t.deliveryAddress);
   if (isDelivery && !bellName.trim()) missing.push(t.bellName ?? 'Bell name');
   if (!paymentMethod) missing.push(t.paymentType ?? t.paymentMethod);
+
+  /*
+   * The name the customer typed at this checkout.
+   *
+   * On a delivery that is the bell name. It is not a second, lesser field: the
+   * name on someone's doorbell is their name, and it is the only name the
+   * delivery form asks for — so it is who the order is from, not just a hint
+   * for the driver. Sending the account placeholder instead is what put
+   * `********` on the kitchen ticket, the receipt and the admin customer list.
+   *
+   * Pickup asks for it outright; dine-in asks for nothing, because the table
+   * already identifies the order.
+   */
+  const typedName = (isDelivery ? bellName : customerName).trim();
 
   const belowMinimum = isDelivery && minimumOrderAmount > 0 && totalPrice < minimumOrderAmount;
   const deliveryUnavailable = isDelivery && !!deliveryAddress && !rate.isAvailable;
@@ -253,8 +268,17 @@ export function useCheckout() {
     const payload: any = {
       email: email.trim(),
       phoneNumber: identityPhone,
-      // The account's own name when it has one; the placeholder only otherwise.
-      name: resolveCustomerName(user?.name),
+      /*
+       * The account's own name comes first here, the other way round from the
+       * order below.
+       *
+       * `/login` writes whatever it is sent straight onto the customer record,
+       * so sending the bell name would rewrite a returning customer's account
+       * every time they ordered to a different door. The typed name is only
+       * adopted when the account has nothing real of its own — which is how a
+       * record stuck on `********` finally gets a name.
+       */
+      name: firstRealName(user?.name, typedName),
       signInWith: 'phone',
       signInSource: 'web',
     };
@@ -344,10 +368,13 @@ export function useCheckout() {
         customerDetails: isDineIn
           ? {}
           : {
-              // `customer` is what login just returned, so it is the freshest
-              // view of the account; `user` covers the case where login was
-              // skipped. Dine-in carries no customer at all.
-              name: resolveCustomerName(customer?.name ?? user?.name),
+              /*
+               * The typed name first, then whatever the account knows —
+               * `customer` is what login just returned, so it is the freshest
+               * view of it, and `user` covers the case where login was skipped.
+               * Dine-in carries no customer at all.
+               */
+              name: firstRealName(typedName, customer?.name, user?.name),
               email: email.trim(),
               phoneNumber: phoneNumber.trim(),
             },
@@ -554,7 +581,7 @@ export function useCheckout() {
     rate, deliveryCharges, deliveryTime, minimumOrderAmount, priorityCharge, priorityTime,
     priorityAvailable, priorityFee, subtotalAfterDiscount, grandTotal, isScheduled,
     // form
-    customerName, setCustomerName, email, setEmail, phoneNumber, setPhoneNumber,
+    customerName, setCustomerName, typedName, email, setEmail, phoneNumber, setPhoneNumber,
     bellName, setBellName, driverNote, setDriverNote,
     timing, scheduledSlot, chooseTiming, confirmSchedule,
     paymentMethod, setPaymentMethod, tip, setTip,

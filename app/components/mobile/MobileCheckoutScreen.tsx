@@ -170,6 +170,13 @@ export default function MobileCheckoutScreen() {
 
         {c.isPickup && (
           <>
+            {/* The name to call out when the bag is ready — delivery gets the
+                same thing from the bell name below. */}
+            <FieldRow icon={User} invalid={c.touched && !c.customerName.trim()}>
+              <input value={c.customerName} onChange={(e) => c.setCustomerName(e.target.value)} aria-label={t.yourName} placeholder={t.yourName} disabled={c.placing} className={rowInput} />
+            </FieldRow>
+            <FieldError message={c.touched && !c.customerName.trim() ? t.nameRequired : undefined} />
+
             <FieldRow icon={Phone} invalid={c.touched && (!c.phoneNumber.trim() || !c.phoneValid)}>
               <input value={c.phoneNumber} onChange={(e) => c.setPhoneNumber(e.target.value)} type='tel' aria-label={t.phoneForQuestions ?? t.phoneNumber} placeholder={t.phoneForQuestions ?? t.phoneNumber} disabled={c.placing} className={rowInput} />
             </FieldRow>
@@ -419,7 +426,7 @@ export default function MobileCheckoutScreen() {
         Verification gate: its own sheet, seeded with the number already typed
         above, rather than the sign-in menu.
       */}
-      <PhoneVerifyDialog open={c.verifyOpen} onClose={() => c.setVerifyOpen(false)} phone={c.phoneNumber} name={c.customerName} />
+      <PhoneVerifyDialog open={c.verifyOpen} onClose={() => c.setVerifyOpen(false)} phone={c.phoneNumber} name={c.typedName} />
 
       <VoucherFlash />
 
