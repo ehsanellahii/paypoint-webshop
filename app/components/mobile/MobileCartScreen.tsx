@@ -21,6 +21,7 @@ import { useAddress } from "~/contexts/address-context";
 import { useStore } from "~/contexts/store-context";
 import { useLanguage } from "~/contexts/language-context";
 import { useStoreNavigation } from "~/hooks/useStoreNavigation";
+import { useOrderingWindow } from "~/hooks/useOrderingWindow";
 
 /**
  * Cart as a full screen (mobile). The desktop equivalent is a dialog; both read
@@ -43,6 +44,8 @@ export default function MobileCartScreen() {
   } = useCart();
   const { orderType, deliveryAddress } = useAddress();
   const { toMenu, toCheckout, toProduct, back } = useStoreNavigation();
+  // Closed shop, no pre-order slot: there is nothing to check out into.
+  const { orderingClosed } = useOrderingWindow();
 
   // Only one row may sit open at a time, and a row being removed is held for
   // the length of its collapse animation before it leaves the cart.
@@ -395,14 +398,15 @@ export default function MobileCartScreen() {
           */}
           <button
             onClick={toCheckout}
-            className="-mx-[18px] flex w-[calc(100%+36px)] items-center gap-3.5 rounded-t-[18px] bg-primary px-5 text-selected-text shadow-[0_-8px_24px_rgba(0,0,0,0.45)] transition active:scale-[0.99]"
+            disabled={orderingClosed}
+            className="-mx-[18px] flex w-[calc(100%+36px)] items-center gap-3.5 rounded-t-[18px] bg-primary px-5 text-selected-text shadow-[0_-8px_24px_rgba(0,0,0,0.45)] transition active:scale-[0.99] disabled:opacity-60 disabled:shadow-none"
             style={{ height: 'calc(64px + env(safe-area-inset-bottom, 0px))', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
           >
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-selected-text text-sm font-extrabold text-white">
               {totalItems}
             </span>
             <span className="flex-1 text-left text-[16.5px] font-extrabold tracking-[-0.01em]">
-              {t.goToCheckout}
+              {orderingClosed ? (t.storeClosedNow ?? t.closed) : t.goToCheckout}
             </span>
             <span className="shrink-0 whitespace-nowrap text-[16.5px] font-extrabold">
               {formatPrice(total)}

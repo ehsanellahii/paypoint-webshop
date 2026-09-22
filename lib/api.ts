@@ -580,7 +580,13 @@ export const createUnconfirmedOrder = async (adminId: string, storeId: string, a
     body: JSON.stringify(orderData),
   });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json?.message || 'Could not reserve the order');
+  if (!res.ok) {
+    // The code travels with the error, so the checkout can say the refusal in
+    // the customer's language rather than echoing the server's English.
+    const err: any = new Error(json?.message || 'Could not reserve the order');
+    err.errorCode = json?.errorCode;
+    throw err;
+  }
   return json?.data ?? json;
 };
 

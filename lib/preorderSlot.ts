@@ -6,6 +6,12 @@ import type { PreorderSlot } from '~/components/menu/PreorderModal';
  */
 const key = (slug: string) => `pos-preorder:${slug || 'default'}`;
 
+/**
+ * The storage key itself, for readers that subscribe to the slot rather than
+ * fetch it — `useOrderingWindow` needs the raw string, not a fresh object.
+ */
+export const preorderSlotKey = key;
+
 export function savePreorderSlot(slug: string, slot: PreorderSlot | null) {
   if (typeof window === 'undefined') return;
   try {

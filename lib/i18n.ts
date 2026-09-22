@@ -21,6 +21,9 @@ export interface Translations {
   yourCart: string;
   checkout: string;
   closed: string;
+  storeClosedNow: string;
+  storeClosedCannotOrder: string;
+  preorderSlotClosed: string;
   total: string;
   totalIncludingVAT: string;
   proceedToCheckout: string;
@@ -415,6 +418,9 @@ export const translations: Record<Language, Translations> = {
     yourCart: 'Your Cart',
     checkout: 'Order',
     closed: 'Closed',
+    storeClosedNow: 'Currently closed',
+    storeClosedCannotOrder: 'The restaurant is closed right now, so no orders can be placed.',
+    preorderSlotClosed: 'The chosen pre-order time is outside the opening hours. Please pick another one.',
     total: 'Total',
     totalIncludingVAT: 'Total (Including VAT)',
     proceedToCheckout: 'Proceed to Checkout',
@@ -778,6 +784,9 @@ export const translations: Record<Language, Translations> = {
   de: {
     openUntil: 'Geöffnet bis',
     closed: 'Geschlossen',
+    storeClosedNow: 'Zurzeit geschlossen',
+    storeClosedCannotOrder: 'Das Restaurant hat gerade geschlossen, daher sind keine Bestellungen möglich.',
+    preorderSlotClosed: 'Die gewählte Vorbestellzeit liegt außerhalb der Öffnungszeiten. Bitte wähle eine andere.',
     location: 'Standort',
     delivery: 'Lieferung',
     pickup: 'Abholung',

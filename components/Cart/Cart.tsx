@@ -10,6 +10,7 @@ import { cn, getImageURL, MenuProduct } from '~/lib/utils';
 import { useStore } from '~/contexts/store-context';
 import SmartImage from '~/lib/SmartImage';
 import { flyToCart } from '~/lib/flyToCart';
+import { useOrderingWindow } from '~/hooks/useOrderingWindow';
 import { useStoreNavigation } from '~/hooks/useStoreNavigation';
 import SwipeToRemove from '~/components/ui/SwipeToRemove';
 
@@ -42,6 +43,8 @@ export default function Cart({ isOpen: controlledIsOpen, onOpenChange, recommend
   };
   const { t } = useLanguage();
   const { toCheckout } = useStoreNavigation();
+  // Closed shop, no pre-order slot: there is nothing to check out into.
+  const { orderingClosed } = useOrderingWindow();
 
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const isOpen = controlledIsOpen ?? internalIsOpen;
@@ -286,19 +289,22 @@ export default function Cart({ isOpen: controlledIsOpen, onOpenChange, recommend
             <div className='shrink-0 px-7 pb-[22px] pt-4'>
               <button
                 onClick={proceed}
-                disabled={navigating}
+                disabled={navigating || orderingClosed}
                 data-cart-footer='1'
-                className='flex h-14 w-full items-center gap-3.5 rounded-2xl bg-primary px-2 text-base font-extrabold text-selected-text transition hover:-translate-y-0.5 hover:brightness-95 hover:shadow-[0_12px_26px_-8px_rgba(0,0,0,0.55)] active:scale-[0.99]'>
+                className='flex h-14 w-full items-center gap-3.5 rounded-2xl bg-primary px-2 text-base font-extrabold text-selected-text transition hover:-translate-y-0.5 hover:brightness-95 hover:shadow-[0_12px_26px_-8px_rgba(0,0,0,0.55)] active:scale-[0.99] disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none'>
                 {navigating ? (
                   <Loader2 className='mx-auto h-[22px] w-[22px] animate-spin' />
                 ) : (
                   <>
                     <span className='flex h-8 min-w-[30px] items-center justify-center rounded-[10px] bg-black px-[9px] text-sm font-extrabold text-white'>{totalItems}</span>
-                    <span className='flex-1 text-left'>{t.goToCheckout}</span>
+                    <span className='flex-1 text-left'>{orderingClosed ? (t.storeClosedNow ?? t.closed) : t.goToCheckout}</span>
                     <span className='pr-3'>{formatPrice(totalPrice)}</span>
                   </>
                 )}
               </button>
+              {orderingClosed && (
+                <p className='mt-2.5 text-center text-[12.5px] font-semibold text-fg-secondary'>{t.storeClosedCannotOrder}</p>
+              )}
             </div>
           </Dialog.Popup>
         </Dialog.Viewport>

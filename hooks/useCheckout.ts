@@ -16,6 +16,9 @@ import type { PreorderSlot } from '~/components/menu/PreorderModal';
 import { ORDER_PAYMENT_METHOD, type PaymentMethod } from '~/components/checkout/PaymentSheet';
 import { savePlacedOrder } from '~/lib/lastOrder';
 import { clearPreorderSlot, getPreorderSlot, savePreorderSlot } from '~/lib/preorderSlot';
+import { isRestaurantOpen, isSlotWithinOpeningHours } from '~/lib/restaurantTimings';
+import { useOrderingWindow } from '~/hooks/useOrderingWindow';
+import { getTranslatedOrderApiErrorMessage } from '~/lib/errorMessages';
 
 
 const TZ = 'Europe/Berlin';
@@ -65,6 +68,8 @@ export function useCheckout() {
   const { cart, totalPrice, totalItems, discountAmount, appliedVoucher, clearCart, orderMessage } = useCart();
   const { orderType, setOrderType, deliveryAddress, setDeliveryAddress, savedAddresses } = useAddress();
   const { slug, toMenu, toConfirmation } = useStoreNavigation();
+  // Also supplies the tick that keeps the answer current while the page sits open.
+  const { storeClosed } = useOrderingWindow();
 
   const isDineIn = !!storeInfo?.tableInfo?.token;
   const isDelivery = !isDineIn && orderType === 'delivery';
@@ -172,9 +177,29 @@ export function useCheckout() {
 
   const belowMinimum = isDelivery && minimumOrderAmount > 0 && totalPrice < minimumOrderAmount;
   const deliveryUnavailable = isDelivery && !!deliveryAddress && !rate.isAvailable;
-  const canPlace = missing.length === 0 && !belowMinimum && !deliveryUnavailable && cart.length > 0;
+
+  /*
+   * Opening hours.
+   *
+   * The menu badge and the cart bar already said "Closed", but nothing stopped
+   * a customer who was already on the checkout — or who deep-linked straight to
+   * it — from pressing the button, and the order printed in a kitchen that had
+   * gone home. The server refuses the same order; this is what stops it being
+   * sent at all, and lets the button say why.
+   *
+   * A pre-order is the exception: it is for a slot, not for now, so it only has
+   * to fall inside that day's window. The slot lives in session storage and can
+   * outlive the hours it was picked under, so it is re-checked rather than
+   * trusted.
+   */
+  const slotOutsideHours =
+    isScheduled && !!scheduledSlot && !isSlotWithinOpeningHours(storeInfo?.timings, scheduledSlot.dayOffset, scheduledSlot.time);
+  const orderingClosed = slotOutsideHours || (storeClosed && !isScheduled);
+
+  const canPlace = missing.length === 0 && !belowMinimum && !deliveryUnavailable && !orderingClosed && cart.length > 0;
 
   const placeLabel = (() => {
+    if (orderingClosed) return t.storeClosedNow ?? t.closed ?? 'Closed';
     if (deliveryUnavailable) return t.weAreNotAvailableInYourArea;
     if (belowMinimum) return `${t.minimumOrderAmountIs} ${formatPrice(minimumOrderAmount)}`;
     if (missing.length === 1) return `${missing[0]} ${t.required ?? ''}`.trim();
@@ -183,6 +208,8 @@ export function useCheckout() {
   })();
 
   const placeHint = (() => {
+    if (slotOutsideHours) return t.preorderSlotClosed ?? '';
+    if (storeClosed && !isScheduled) return t.storeClosedCannotOrder ?? '';
     if (deliveryUnavailable) return t.weAreNotAvailableInYourArea;
     if (belowMinimum) return `${t.minimumOrderAmountIs} ${formatPrice(minimumOrderAmount)}`;
     /*
@@ -257,10 +284,34 @@ export function useCheckout() {
     return json?.data;
   };
 
+  /*
+   * The server's own refusal, said in the customer's language.
+   *
+   * It is the second half of the opening-hours gate: the check above stops the
+   * button, this turns "Store is closed" from an API into something the shop
+   * would say — and covers every other coded refusal the order route raises.
+   */
+  const translateOrderError = (body: any) => getTranslatedOrderApiErrorMessage(body?.errorCode, body?.message, t);
+
   const placeOrder = async () => {
     setTouched(true);
     setSubmitError(null);
     if (!canPlace || placing) return;
+
+    /*
+     * Asked again, of the clock rather than of `canPlace`: that flag comes from
+     * a render that may be minutes old, and a shop can close between filling
+     * the form in and pressing the button.
+     */
+    if (isScheduled && scheduledSlot) {
+      if (!isSlotWithinOpeningHours(storeInfo?.timings, scheduledSlot.dayOffset, scheduledSlot.time)) {
+        setSubmitError(t.preorderSlotClosed ?? 'The chosen pre-order time is outside the opening hours.');
+        return;
+      }
+    } else if (!isRestaurantOpen(storeInfo?.timings)) {
+      setSubmitError(t.storeClosedCannotOrder ?? 'The restaurant is closed right now, so no orders can be placed.');
+      return;
+    }
 
     /*
      * Phone verification is switched off for now, so checkout asks nobody to
@@ -453,7 +504,7 @@ export function useCheckout() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err?.message || 'Failed to submit order');
+        throw new Error(translateOrderError(err) || 'Failed to submit order');
       }
       const result = await res.json();
       const orderRef = result?.data?.collectionCode || result?.data?.id || '';
@@ -465,7 +516,8 @@ export function useCheckout() {
       clearPreorderSlot(slug);
       toConfirmation(orderRef);
     } catch (e) {
-      setSubmitError(e instanceof Error ? e.message : 'An unknown error occurred while submitting your order.');
+      const coded = e instanceof Error ? translateOrderError({ errorCode: (e as any).errorCode, message: e.message }) : '';
+      setSubmitError(coded || 'An unknown error occurred while submitting your order.');
       setPlacing(false);
     }
   };
@@ -512,6 +564,7 @@ export function useCheckout() {
     // validation + submit
     touched, placing, submitError, emailValid, phoneValid, missing, payNow, setPayNow,
     verifyOpen, setVerifyOpen,
-    belowMinimum, deliveryUnavailable, canPlace, placeLabel, placeHint, placeOrder,
+    belowMinimum, deliveryUnavailable, storeClosed, slotOutsideHours, orderingClosed,
+    canPlace, placeLabel, placeHint, placeOrder,
   };
 }

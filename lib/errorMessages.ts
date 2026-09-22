@@ -27,4 +27,25 @@ const getTranslatedVoucherApiErrorMessage = (code: string, message: string, t: a
   return message;
 };
 
-export { getTranslatedVoucherApiErrorMessage };
+/**
+ * Order errors the server raises with a code, so the shop can say them in the
+ * customer's language instead of echoing the English `message`.
+ *
+ * The keys are the `errorCode` values on the API's error body; the values are
+ * keys into the translation table.
+ */
+const orderApiErrorMessageKeys: Record<string, string> = {
+  STORE_CLOSED: 'storeClosedCannotOrder',
+  PREORDER_OUTSIDE_OPENING_HOURS: 'preorderSlotClosed',
+};
+
+/**
+ * A translated message for an order API error body, falling back to whatever
+ * the server said when the code is one we do not know.
+ */
+const getTranslatedOrderApiErrorMessage = (code: string | undefined, message: string | undefined, t: any): string => {
+  const key = code ? orderApiErrorMessageKeys[code] : undefined;
+  return (key && t?.[key]) || message || '';
+};
+
+export { getTranslatedVoucherApiErrorMessage, getTranslatedOrderApiErrorMessage };

@@ -3,18 +3,18 @@
 import { useCart } from '~/contexts/cart-context';
 import { useLanguage } from '@/contexts/language-context';
 import { formatPrice } from '@/lib/api';
-import { isRestaurantOpen } from '~/lib/restaurantTimings';
-import { useStore } from '~/contexts/store-context';
+import { useOrderingWindow } from '~/hooks/useOrderingWindow';
 
 /**
  * Mobile-only floating cart bar (prototype `.wzcartbar`).
  * Pure trigger — the Cart dialog itself is hosted centrally in HomeScreen.
  */
 export default function BottomBar({ onOpenCart }: { onOpenCart: () => void }) {
-  const storeInfo = useStore();
   const { totalItems, totalPrice } = useCart();
   const { t } = useLanguage();
-  const isClosed = !isRestaurantOpen(storeInfo?.timings || {});
+  // A chosen pre-order slot keeps the bar live outside opening hours — the
+  // basket is for that slot, not for now.
+  const { orderingClosed: isClosed } = useOrderingWindow();
 
   if (totalItems === 0) return null;
 
