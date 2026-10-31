@@ -139,6 +139,19 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Everything except Next's own assets and static files.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|txt|xml|webmanifest)$).*)'],
+  matcher: [
+    // Everything except Next's own assets and static files.
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|txt|xml|webmanifest)$).*)',
+    /*
+     * …except the shop's own icons and manifest (31.10.2026): on a
+     * restaurant's domain they must reach that restaurant's routes under
+     * app/[slug], so they go through the rewrite above like a page does.
+     * On our host they fall through to app/favicon.ico and friends.
+     */
+    '/favicon.ico',
+    '/icon-192.png',
+    '/icon-512.png',
+    '/apple-touch-icon.png',
+    '/site.webmanifest',
+  ],
 };

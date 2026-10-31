@@ -1,6 +1,15 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  /*
+   * Metadata in the <head> for every visitor (31.10.2026). Next 16 streams
+   * `generateMetadata` into the body for clients it does not list here, and
+   * Googlebot is not on its default list — so the shop's favicon tag reached
+   * Google after </head>, where it is ignored, and the Business Profile showed
+   * our mark. Blocking on metadata costs nothing extra: the page needs the
+   * same store request before it can render anyway.
+   */
+  htmlLimitedBots: /.*/,
   // Placeholder, but make sure to add whatever place you're hosting your images from
   images: {
     /*

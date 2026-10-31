@@ -41,49 +41,22 @@ export const FALLBACK_ICONS: Metadata['icons'] = {
  * The restaurant's logo in the browser tab, ours when they have not uploaded
  * one.
  *
- * `settings.logo` is the webshop logo the admin panel sets per store and
- * `logo` the firm-wide one, the same order the header resolves them in, so the
- * tab shows the picture the guest already sees on the page. Both are absolute
- * S3 URLs by the time they reach here — see `getImageURL`.
- *
- * A logo that is configured but fails to load cannot fall back: the browser
- * has already committed to the icon it was given and simply draws its own
- * placeholder. Only "no logo set" is recoverable, and that is what this covers.
+ * Since 31.10.2026 the tags name the shop's own fixed icon URLs
+ * (lib/storeIcon.ts) instead of an optimizer URL: Google only takes a favicon
+ * that is square, a multiple of 48 px and on a stable address of the shop's
+ * domain, and that is what those routes serve — the logo padded to a square.
+ * `base` is '' on the restaurant's own domain and '/<slug>' on ours.
  */
-/*
- * Widths for the two jobs — the tab icon, and the icon iOS scales for the home
- * screen. Both have to be values `images.imageSizes` already allows, or the
- * optimizer answers 400 and the tab falls back to the browser's blank page
- * mark.
- */
-const ICON_WIDTH = 64;
-const APPLE_ICON_WIDTH = 256;
-
-/**
- * The logo, resized to something a favicon should weigh.
- *
- * A restaurant uploads a full-size press image — the logo in production is a
- * 1 MB PNG — and a favicon pointing straight at it makes the browser download
- * the whole megabyte to draw sixteen square pixels. That is the second or two
- * the tab spends on the default icon before the logo appears. The same file
- * through the optimizer is a 6 KB webp, and it is cached from then on.
- *
- * SVG is handed through untouched: the optimizer rejects it unless
- * `dangerouslyAllowSVG` is set, and a vector logo is already small.
- */
-function iconURL(logo: string, width: number): string {
-  if (/\.svg(\?|$)/i.test(logo)) return logo;
-  // Relative on purpose — `metadataBase` makes it absolute against whichever
-  // host the guest arrived on, the restaurant's own domain included.
-  return `/_next/image?url=${encodeURIComponent(logo)}&w=${width}&q=75`;
-}
-
-function storeIcons(store: IStoreInfo | null): Metadata['icons'] {
+function storeIcons(store: IStoreInfo | null, base: string): Metadata['icons'] {
   const logo = store?.settings?.logo?.trim() || store?.logo?.trim();
   if (!logo) return FALLBACK_ICONS;
-  // No `type`: the optimizer answers webp, the SVG path stays SVG, and a
-  // wrong `type` is worse than none — browsers sniff it from the response.
-  return { icon: [{ url: iconURL(logo, ICON_WIDTH) }], apple: [{ url: iconURL(logo, APPLE_ICON_WIDTH) }] };
+  return {
+    icon: [
+      { url: `${base}/favicon.ico`, sizes: '48x48', type: 'image/png' },
+      { url: `${base}/icon-192.png`, sizes: '192x192', type: 'image/png' },
+    ],
+    apple: [{ url: `${base}/apple-touch-icon.png`, sizes: '180x180', type: 'image/png' }],
+  };
 }
 
 type BuildArgs = {
@@ -136,7 +109,8 @@ export async function buildStoreMetadata({ store, slug, path = '', title }: Buil
 
   return {
     metadataBase: new URL(origin),
-    icons: storeIcons(store),
+    icons: storeIcons(store, base),
+    manifest: `${base}/site.webmanifest`,
     // `absolute` so the parent layout's title template does not append the
     // brand a second time.
     title: { absolute: heading },
