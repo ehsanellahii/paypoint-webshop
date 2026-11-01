@@ -2,12 +2,13 @@
 
 import { useState } from 'react';
 
+import { useAddress } from '~/contexts/address-context';
 import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
 import { forgetPassedSlot, useOrderingWindow } from '~/hooks/useOrderingWindow';
 import { useStoreNavigation } from '~/hooks/useStoreNavigation';
 import { formatSlotLabel, savePreorderSlot, type PreorderSlot } from '~/lib/preorderSlot';
-import { nextOpeningLabel } from '~/lib/restaurantTimings';
+import { deliveryLaterLabel, nextOpeningLabel } from '~/lib/restaurantTimings';
 
 /**
  * What the cart's order button does about time, shared by the desktop cart and
@@ -23,12 +24,18 @@ import { nextOpeningLabel } from '~/lib/restaurantTimings';
  *    gone and picks another. A time that passes while the shop is open is
  *    dropped by `useOrderingWindow` and the order simply becomes "as soon as
  *    possible" (`checkout`), as the checkout shows.
+ *
+ * All of it by the hours of the selected order type. A delivery that has not
+ * started yet while pickup is open (a store with its own delivery hours) is
+ * `preorder` too, but the notice says so — "Lieferung ab 14:00 · Abholung
+ * jetzt möglich" — and `switchToPickup` offers the way out, never "closed".
  */
 export function useCartTiming() {
   const { t, language } = useLanguage();
   const storeInfo = useStore();
   const { slug } = useStoreNavigation();
-  const { storeClosed, slot, slotCheck, slotOutsideHours, slotPassed, orderingClosed } = useOrderingWindow();
+  const { storeClosed, slot, slotCheck, slotOutsideHours, slotPassed, orderingClosed, deliveryLater, pickupOffered, usesDeliveryHours } = useOrderingWindow();
+  const { orderType, setOrderType } = useAddress();
   // Forgetting a passed slot changes no stored value, so this re-renders the cart itself.
   const [, setForgotten] = useState(0);
   const forget = () => {
@@ -39,9 +46,12 @@ export function useCartTiming() {
   const action: 'checkout' | 'preorder' | 'newTime' = slotOutsideHours || slotPassed ? 'newTime' : orderingClosed ? 'preorder' : 'checkout';
 
   let notice = '';
-  if (action === 'newTime') notice = slotOutsideHours ? t.preorderSlotClosed : t.preorderSlotPassedPickNew;
-  else if (action === 'preorder') {
-    const next = nextOpeningLabel(storeInfo, t);
+  if (action === 'newTime') notice = slotOutsideHours ? (usesDeliveryHours ? t.preorderSlotOutsideDeliveryHours : t.preorderSlotClosed) : t.preorderSlotPassedPickNew;
+  else if (action === 'preorder' && deliveryLater) {
+    // Not "closed": the restaurant is open, only delivery has not started (or is over for today).
+    notice = `${deliveryLaterLabel(deliveryLater.opensAt, t)}${pickupOffered ? ` · ${t.pickupPossibleNow}` : ''}. ${t.deliveryPreorderHint}`;
+  } else if (action === 'preorder') {
+    const next = nextOpeningLabel(storeInfo, t, undefined, orderType);
     notice = `${t.storeClosedNow}${next ? ` · ${next}` : ''}. ${t.storeClosedPreorderHint}`;
   }
 
@@ -53,6 +63,11 @@ export function useCartTiming() {
     notice,
     slotLabel,
     storeClosed,
+    /**
+     * Delivery has not started yet but pickup is open, and the store offers
+     * pickup: switch the order to pickup. Null otherwise.
+     */
+    switchToPickup: action === 'preorder' && deliveryLater && pickupOffered ? () => setOrderType('pickup') : null,
     /** Keep the slot where the menu and checkout read it. */
     saveSlot: (next: PreorderSlot) => {
       forget();

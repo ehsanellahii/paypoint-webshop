@@ -1,18 +1,28 @@
 'use client';
 
+import { useAddress } from '~/contexts/address-context';
 import { useStore } from '~/contexts/store-context';
 import BrandMark from './BrandMark';
 import { useLanguage } from '~/contexts/language-context';
-import { getTodayTimings, isRestaurantOpen } from '~/lib/restaurantTimings';
+import { deliveryLaterLabel, orderingStatus } from '~/lib/restaurantTimings';
 import { getStoreCover } from '~/lib/storeMedia';
 import { formatStoreAddress } from '~/lib/storeAddress';
 
 export default function MenuHero() {
   const storeInfo = useStore();
   const { t } = useLanguage();
+  const { orderType } = useAddress();
   const cover = getStoreCover(storeInfo);
-  const open = isRestaurantOpen(storeInfo?.timings || {});
-  const { close } = getTodayTimings(storeInfo?.timings);
+  /*
+   * By the hours of the selected order type: a delivery reads the store's
+   * delivery hours when it has its own. Delivery not started yet while pickup
+   * is open is its own state — "Lieferung ab 14:00 · Abholung jetzt möglich",
+   * never "Geschlossen".
+   */
+  const status = orderingStatus(storeInfo, orderType);
+  const open = status.state === 'open';
+  const close = status.state === 'open' ? status.close : '';
+  const pickupOffered = storeInfo?.settings?.orderTypes?.takeaway ?? true;
   // "Adalbertstraße 36, 10179 Berlin" — the free text already carries the city, so joining it again printed it twice.
   const address = formatStoreAddress(storeInfo);
 
@@ -37,10 +47,18 @@ export default function MenuHero() {
             while the box is still at its minimum. */}
         <div className='relative flex flex-1 flex-col justify-end p-7 md:p-10'>
           {/* Open badge */}
-          <div className='mb-3.5 inline-flex self-start items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-[11.5px] font-extrabold uppercase tracking-[0.05em]'>
-            <span className={`h-[7px] w-[7px] rounded-full ${open ? 'bg-success anim-pulse-ring' : 'bg-brand-red'}`} />
-            {open ? `${t.openUntil ?? 'Open until'} ${close}` : (t.closed ?? 'Closed')}
-          </div>
+          {status.state === 'deliveryLater' ? (
+            <div className='mb-3.5 inline-flex self-start items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-[11.5px] font-extrabold uppercase tracking-[0.05em]'>
+              <span className='h-[7px] w-[7px] rounded-full bg-warning' />
+              {deliveryLaterLabel(status.deliveryOpensAt, t)}
+              {pickupOffered ? ` · ${t.pickupPossibleNow}` : ''}
+            </div>
+          ) : (
+            <div className='mb-3.5 inline-flex self-start items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-[11.5px] font-extrabold uppercase tracking-[0.05em]'>
+              <span className={`h-[7px] w-[7px] rounded-full ${open ? 'bg-success anim-pulse-ring' : 'bg-brand-red'}`} />
+              {open ? `${t.openUntil ?? 'Open until'} ${close}` : (t.closed ?? 'Closed')}
+            </div>
+          )}
 
           <div className='leading-[0.95]'>
             <BrandMark size='hero' />

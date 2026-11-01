@@ -23,6 +23,19 @@ const TEXTS: Record<string, Text> = {
     de: 'Die gewählte Vorbestellzeit liegt außerhalb der Öffnungszeiten. Bitte wähle eine andere.',
     en: 'The chosen pre-order time is outside the opening hours. Please pick another one.',
   },
+  /*
+   * Separate delivery hours (server 0052). The restaurant is open for pickup,
+   * delivery is not yet (or no longer today). `orderErrorText` names the time
+   * from `data.deliveryOpensAt`; this is the sentence without one.
+   */
+  DELIVERY_CLOSED_NOW: {
+    de: 'Lieferung ist gerade nicht möglich. Bestell die Lieferung für später vor oder hol jetzt ab.',
+    en: 'Delivery is not available right now. Pre-order your delivery for later or pick up now.',
+  },
+  PREORDER_OUTSIDE_DELIVERY_HOURS: {
+    de: 'Die gewählte Zeit liegt außerhalb der Lieferzeiten. Bitte wähle eine andere.',
+    en: 'The chosen time is outside the delivery hours. Please pick another one.',
+  },
   // The store is locked for an unpaid PayPoint invoice — to the guest it is simply closed.
   BILLING_LOCKED: {
     de: 'Das Restaurant hat gerade geschlossen, daher sind keine Bestellungen möglich.',
@@ -91,6 +104,16 @@ const TEXTS: Record<string, Text> = {
   PAYMENT_METHOD_DISABLED: {
     de: 'Diese Zahlungsart ist gerade nicht verfügbar. Bitte wähle eine andere.',
     en: 'This payment method is not available right now. Please choose another one.',
+  },
+  // A table QR order with a token that is no longer valid (server 0052, E2E fix).
+  TABLE_TOKEN_INVALID: {
+    de: 'Dieser Tisch-Code ist nicht mehr gültig. Bitte scanne den QR-Code am Tisch erneut.',
+    en: 'This table code is no longer valid. Please scan the QR code at your table again.',
+  },
+  // The restaurant's Stripe account cannot take this method (server 0052).
+  PAYMENT_METHOD_UNAVAILABLE: {
+    de: 'Diese Zahlungsart ist bei diesem Restaurant gerade nicht verfügbar. Bitte wähle eine andere.',
+    en: 'This payment method is not available at this restaurant right now. Please choose another one.',
   },
   ORDER_TYPE_DISABLED: {
     de: 'Diese Bestellart wird gerade nicht angeboten.',
@@ -253,15 +276,50 @@ export function apiErrorText(code: string | null | undefined, language: Language
 
 /**
  * An order refusal, with the amount where the server sends one
- * (`MIN_ORDER_NOT_MET` → `data.minimumOrderAmount`).
+ * (`MIN_ORDER_NOT_MET` → `data.minimumOrderAmount`) and the delivery start
+ * (`DELIVERY_CLOSED_NOW` → `data.deliveryOpensAt`, "14:00", or null when no
+ * delivery is left today).
+ *
+ * `pickupOffered` (default true) says whether the store takes pickup, so a
+ * delivery refusal only suggests picking up where that is possible.
  */
-export function orderErrorText(e: any, language: Language | string | undefined, formatPrice: (v: number) => string): string {
+export function orderErrorText(
+  e: any,
+  language: Language | string | undefined,
+  formatPrice: (v: number) => string,
+  { pickupOffered = true }: { pickupOffered?: boolean } = {},
+): string {
   const code = errorCodeOf(e);
+  const en = language === 'en';
   const minimum = Number(e?.data?.minimumOrderAmount);
   if (knownErrorCode(code) === 'MIN_ORDER_NOT_MET' && Number.isFinite(minimum) && minimum > 0) {
-    return language === 'en'
+    return en
       ? `The minimum order value for your area is ${formatPrice(minimum)}.`
       : `Der Mindestbestellwert für dein Liefergebiet beträgt ${formatPrice(minimum)}.`;
+  }
+  if (code === 'DELIVERY_CLOSED_NOW') {
+    const opensAt = e?.data?.deliveryOpensAt;
+    const known = typeof opensAt === 'string' && /^\d{2}:\d{2}$/.test(opensAt);
+    // Null: nothing left today. Absent: the server did not say — no time named.
+    const first = known
+      ? en
+        ? `Delivery is only available from ${opensAt} today.`
+        : `Lieferung ist heute erst ab ${opensAt} möglich.`
+      : opensAt === null
+        ? en
+          ? 'Delivery is no longer available today.'
+          : 'Lieferung ist heute nicht mehr möglich.'
+        : en
+          ? 'Delivery is not available right now.'
+          : 'Lieferung ist gerade nicht möglich.';
+    const second = pickupOffered
+      ? en
+        ? 'Pre-order your delivery for later or pick up now.'
+        : 'Bestell die Lieferung für später vor oder hol jetzt ab.'
+      : en
+        ? 'Pre-order your delivery for later.'
+        : 'Bestell die Lieferung für später vor.';
+    return `${first} ${second}`;
   }
   return apiErrorText(code, language, 'order');
 }

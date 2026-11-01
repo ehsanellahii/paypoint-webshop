@@ -4,11 +4,12 @@ import { useRouter } from 'next/navigation';
 import { ChevronRight, Info, Mail, MapPin, Phone, Shield } from 'lucide-react';
 
 import MobileSheet, { SheetDivider, SheetGroup } from '~/components/mobile/MobileSheet';
+import { useAddress } from '~/contexts/address-context';
 import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
 import { useStoreNavigation } from '~/hooks/useStoreNavigation';
 import { berlinClockAt } from '~/lib/berlinTime';
-import { dayHoursText, getActiveWindow, nextOpeningLabel, windowsFor, WEEKDAY_KEYS, type WeeklyHours } from '~/lib/restaurantTimings';
+import { dayHoursText, deliveryLaterLabel, nextOpeningLabel, orderingStatus, windowsFor, WEEKDAY_KEYS, type WeeklyHours } from '~/lib/restaurantTimings';
 import { formatStoreAddress } from '~/lib/storeAddress';
 import { cn } from '~/lib/utils';
 
@@ -17,6 +18,31 @@ const WEEK = [1, 2, 3, 4, 5, 6, 0] as const;
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return <div className='mb-2.5 mt-6 text-[12px] font-extrabold uppercase tracking-[0.06em] text-muted-foreground'>{children}</div>;
+}
+
+/** One week of hours, Monday first, today marked — the opening hours, or a store's own delivery hours. */
+function WeekHours({ timings, todayIndex }: { timings: WeeklyHours; todayIndex: number }) {
+  const { t } = useLanguage();
+  return (
+    <SheetGroup>
+      {WEEK.map((d, i) => {
+        // Every window of the day ("11:30 – 15:00, 17:30 – 22:00"); none for a day ticked closed.
+        const hours = dayHoursText(timings, d);
+        const isToday = d === todayIndex;
+        return (
+          <div key={d} className={cn('flex items-center justify-between gap-3 px-4 py-3', i < WEEK.length - 1 && 'border-b border-white/[0.06]', isToday && 'bg-white/[0.04]')}>
+            <span className={cn('text-[14.5px]', isToday ? 'font-extrabold text-white' : 'font-semibold text-fg-strong')}>
+              {t[WEEKDAY_KEYS[d]]}
+              {isToday && <span className='ml-2 text-[12px] font-bold text-muted-foreground'>{t.today}</span>}
+            </span>
+            <span className={cn('text-right text-[14px] font-semibold tabular-nums', hours ? 'text-fg-secondary' : 'text-muted-foreground-2')}>
+              {hours ?? t.closedToday}
+            </span>
+          </div>
+        );
+      })}
+    </SheetGroup>
+  );
 }
 
 /** A tappable row inside a `SheetGroup` — the account drawer's row, as a link or a button. */
@@ -52,12 +78,21 @@ export default function MobileRestaurantInfoSheet({ open, onClose }: { open: boo
   const storeInfo = useStore();
   const router = useRouter();
   const { base, withToken } = useStoreNavigation();
+  const { orderType } = useAddress();
 
   const timings = (storeInfo?.timings ?? null) as WeeklyHours;
-  const active = getActiveWindow(timings);
-  const next = nextOpeningLabel(storeInfo, t);
+  /*
+   * Today's status by the hours of the selected order type, as the menu header
+   * says it: delivery hours for a delivery when the store has its own.
+   */
+  const status = orderingStatus(storeInfo, orderType);
+  const next = status.state === 'closed' ? nextOpeningLabel(storeInfo, t, undefined, orderType) : null;
+  const pickupOffered = !storeInfo?.tableInfo?.token && (storeInfo?.settings?.orderTypes?.takeaway ?? true);
   const todayIndex = berlinClockAt().dayIndex;
   const hasHours = WEEK.some((d) => windowsFor(timings, d).length > 0);
+  // A store with delivery hours of its own: a second week, "Lieferzeiten" (a day without delivery reads "Geschlossen").
+  const deliveryTimings = (storeInfo?.deliveryTimings ?? null) as WeeklyHours;
+  const hasDeliveryWeek = !!deliveryTimings;
 
   const address = formatStoreAddress(storeInfo);
   const phone = storeInfo?.phone?.trim() || '';
@@ -75,33 +110,34 @@ export default function MobileRestaurantInfoSheet({ open, onClose }: { open: boo
 
       {/* Today's status — and, when closed, when it opens next. */}
       <div className='flex items-center gap-2.5 rounded-2xl bg-card px-4 py-3.5'>
-        <span className={cn('h-2 w-2 shrink-0 rounded-full', active ? 'bg-success anim-pulse-ring' : 'bg-brand-red')} />
+        <span
+          className={cn(
+            'h-2 w-2 shrink-0 rounded-full',
+            status.state === 'open' ? 'bg-success anim-pulse-ring' : status.state === 'deliveryLater' ? 'bg-warning' : 'bg-brand-red',
+          )}
+        />
         <span className='min-w-0 flex-1 text-[14.5px] font-bold text-white'>
-          {active ? t.openNowUntil.replace('{time}', active.close) : next ? `${t.closed} · ${next}` : t.closed}
+          {status.state === 'open'
+            ? t.openNowUntil.replace('{time}', status.close)
+            : status.state === 'deliveryLater'
+              ? `${deliveryLaterLabel(status.deliveryOpensAt, t)}${pickupOffered ? ` · ${t.pickupPossibleNow}` : ''}`
+              : next
+                ? `${t.closed} · ${next}`
+                : t.closed}
         </span>
       </div>
 
       {hasHours && (
         <>
-          <SectionLabel>{t.openingHours}</SectionLabel>
-          <SheetGroup>
-            {WEEK.map((d, i) => {
-              // Every window of the day ("11:30 – 15:00, 17:30 – 22:00"); none for a day ticked closed.
-              const hours = dayHoursText(timings, d);
-              const isToday = d === todayIndex;
-              return (
-                <div key={d} className={cn('flex items-center justify-between gap-3 px-4 py-3', i < WEEK.length - 1 && 'border-b border-white/[0.06]', isToday && 'bg-white/[0.04]')}>
-                  <span className={cn('text-[14.5px]', isToday ? 'font-extrabold text-white' : 'font-semibold text-fg-strong')}>
-                    {t[WEEKDAY_KEYS[d]]}
-                    {isToday && <span className='ml-2 text-[12px] font-bold text-muted-foreground'>{t.today}</span>}
-                  </span>
-                  <span className={cn('text-right text-[14px] font-semibold tabular-nums', hours ? 'text-fg-secondary' : 'text-muted-foreground-2')}>
-                    {hours ?? t.closedToday}
-                  </span>
-                </div>
-              );
-            })}
-          </SheetGroup>
+          <SectionLabel>{hasDeliveryWeek ? t.openingHoursPickup : t.openingHours}</SectionLabel>
+          <WeekHours timings={timings} todayIndex={todayIndex} />
+        </>
+      )}
+
+      {hasDeliveryWeek && (
+        <>
+          <SectionLabel>{t.deliveryHours}</SectionLabel>
+          <WeekHours timings={deliveryTimings} todayIndex={todayIndex} />
         </>
       )}
 

@@ -7,6 +7,7 @@ import { Dialog } from '@base-ui/react/dialog';
 import WheelColumn, { Wheel, type WheelOption } from './WheelPicker';
 import { bookableDays } from '~/lib/generateTimeSlotsWithinHours';
 import { formatSlotDay, formatSlotLabel, PREORDER_PICKER_LEAD_MINUTES, type PreorderSlot } from '~/lib/preorderSlot';
+import { scheduleFor } from '~/lib/restaurantTimings';
 import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
 import { useAddress } from '~/contexts/address-context';
@@ -24,6 +25,8 @@ export default function MobilePreorderSheet({ open, onClose, onConfirm, onStanda
   const storeInfo = useStore();
   const { orderType } = useAddress();
   const isDelivery = orderType === 'delivery';
+  // A delivery only inside the store's delivery hours when it has its own; pickup inside the normal hours.
+  const schedule = scheduleFor(storeInfo, orderType);
 
   // The chosen day as a Berlin date; null until the guest turns the wheel.
   const [pickedDate, setPickedDate] = useState<string | null>(null);
@@ -37,7 +40,7 @@ export default function MobilePreorderSheet({ open, onClose, onConfirm, onStanda
    */
   const days = useMemo(() => {
     const now = Date.now();
-    return bookableDays({ weeklyHours: storeInfo?.timings, now, intervalMinutes: 30, minLeadMinutes: PREORDER_PICKER_LEAD_MINUTES }).map(
+    return bookableDays({ weeklyHours: schedule, now, intervalMinutes: 30, minLeadMinutes: PREORDER_PICKER_LEAD_MINUTES }).map(
       (d): WheelOption & { date: string; slots: string[] } => ({
         value: d.date,
         label: formatSlotDay(d.date, { today: t.today, tomorrow: t.tomorrow }, language, now),
@@ -47,7 +50,7 @@ export default function MobilePreorderSheet({ open, onClose, onConfirm, onStanda
     );
     // `open` is a dependency on purpose: it is what makes "now" current.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [language, t, storeInfo?.timings, open]);
+  }, [language, t, schedule, open]);
 
   // Until the guest picks a day, the first one that still has a time on offer.
   const day = days.find((d) => d.date === pickedDate) ?? days.find((d) => d.slots.length > 0) ?? days[0];

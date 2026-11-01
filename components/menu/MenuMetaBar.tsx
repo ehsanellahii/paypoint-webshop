@@ -6,8 +6,9 @@ import { useStore } from '~/contexts/store-context';
 import { useLanguage } from '~/contexts/language-context';
 import { formatEtaRange } from '~/lib/utils';
 import { formatPrice } from '@/lib/api';
-import { getTodayTimings, isRestaurantOpen } from '~/lib/restaurantTimings';
+import { deliveryLaterLabel, orderingStatus } from '~/lib/restaurantTimings';
 import { cn } from '~/lib/utils';
+import { usePickupNow } from '~/hooks/usePickupNow';
 
 type Props = {
   onRequireAddress: () => void;
@@ -20,14 +21,17 @@ export default function MenuMetaBar({ onRequireAddress, onOpenInfo, onOpenPreord
   const { t } = useLanguage();
   const storeInfo = useStore();
   const { orderType, setOrderType, deliveryAddress, deliveryRate } = useAddress();
+  const pickupNow = usePickupNow();
 
   const isPickupAvailable = storeInfo?.settings?.orderTypes?.takeaway ?? true;
   const isDeliveryAvailable = storeInfo?.settings?.orderTypes?.delivery ?? false;
   const isDineIn = !!storeInfo?.tableInfo?.token;
 
   const isDelivery = orderType === 'delivery';
-  const open = isRestaurantOpen(storeInfo?.timings || {});
-  const { close } = getTodayTimings(storeInfo?.timings);
+  // By the hours of the selected order type (delivery hours for a delivery when the store has them).
+  const status = orderingStatus(storeInfo, orderType);
+  const open = status.state === 'open';
+  const close = status.state === 'open' ? status.close : '';
 
   // The server's delivery terms for this address, as checkout uses them.
   const rate = deliveryRate;
@@ -69,7 +73,24 @@ export default function MenuMetaBar({ onRequireAddress, onOpenInfo, onOpenPreord
 
         {/* Info row */}
         <div className='flex flex-wrap items-center gap-3 text-[13.5px] font-semibold text-muted-foreground'>
-          {open ? (
+          {status.state === 'deliveryLater' ? (
+            /*
+             * Delivery has not started yet but the restaurant is open: say
+             * when delivery starts, and offer pickup — one tap switches the
+             * toggle. A delivery time can still be booked under "Vorbestellen".
+             */
+            <>
+              <span className='text-warning'>{deliveryLaterLabel(status.deliveryOpensAt, t)}</span>
+              {isPickupAvailable && (
+                <>
+                  <span className='opacity-40'>·</span>
+                  <button onClick={pickupNow} className='font-bold text-link'>
+                    {t.pickupPossibleNow}
+                  </button>
+                </>
+              )}
+            </>
+          ) : open ? (
             <span>
               {t.openUntil ?? 'Open until'} {close}
             </span>

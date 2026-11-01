@@ -2,6 +2,7 @@ import { cache } from 'react';
 import { getImageURL, IMenuData, MenuCategory, MenuProduct } from './utils';
 
 import { API_BASE_URL } from './apiBase';
+import { parseOnlinePaymentMethods } from './onlinePaymentMethods';
 
 export { API_BASE_URL };
 /** Payments and Connect live outside the /integration mount. */
@@ -151,12 +152,24 @@ export const getStoreData = cache(async (slug: string, token?: string) => {
     coverImage: data?.data?.coverFileName || data?.data?.webShopSettings?.coverImage ? `${getImageURL(data?.data?.coverFileName || data?.data?.webShopSettings?.coverImage)}` : null,
     timings: data?.data?.timings || null,
     /*
+     * Separate delivery hours (server 0052): null while the store has none,
+     * and on an older server that does not send the field — delivery then
+     * keeps using `timings`.
+     */
+    deliveryTimings: data?.data?.deliveryTimings || null,
+    /*
      * Gates the online payment methods. Deliberately defaulted to false: a
      * store whose payload predates this field, or whose Stripe link is broken,
      * should offer cash rather than take the customer through a payment that
      * cannot succeed.
      */
     stripeChargesEnabled: !!data?.data?.stripeChargesEnabled,
+    /*
+     * Which online methods really work on the restaurant's Stripe account
+     * (server 0052). Null from an older server: the online rows then follow
+     * `stripeChargesEnabled` alone, as before.
+     */
+    onlinePaymentMethods: parseOnlinePaymentMethods(data?.data?.onlinePaymentMethods),
     slug: slug,
     /*
      * The store's own hostname, when it has one. Present even when the guest
@@ -197,7 +210,7 @@ export const getStoreData = cache(async (slug: string, token?: string) => {
   };
 });
 
-export const resolveFavorites = async (adminId: string, storeId: string, apiKey: string, productIds: string[]) => {
+export const resolveFavorites = async (adminId: string, storeId: string, apiKey: string, productIds: string[], orderType?: string) => {
   if (!storeId || productIds.length === 0 || !adminId) {
     return { products: [], missingIds: [] };
   }
@@ -205,7 +218,8 @@ export const resolveFavorites = async (adminId: string, storeId: string, apiKey:
   const response = await fetch(`${API_BASE_URL}/favorites/resolve`, {
     method: 'POST',
     headers: apiHeaders({ apiKey, adminId, storeId }),
-    body: JSON.stringify({ productIds }),
+    // `orderType` prices the favourites like the menu (server 0052 reads it; older servers ignore it).
+    body: JSON.stringify(orderType ? { productIds, orderType } : { productIds }),
     cache: 'no-store',
   });
 
@@ -247,14 +261,14 @@ export const syncFavorites = async (adminId: string, storeId: string, apiKey: st
  * Backed by the server's co-purchase product pairings. Returns [] on failure so
  * the cart can fall back to a simple menu slice.
  */
-export const fetchCartRecommendations = async (adminId: string, storeId: string, apiKey: string, productIds: string[], limit = 8): Promise<MenuProduct[]> => {
+export const fetchCartRecommendations = async (adminId: string, storeId: string, apiKey: string, productIds: string[], limit = 8, orderType?: string): Promise<MenuProduct[]> => {
   if (!adminId || !storeId) return [];
 
   try {
     const response = await fetch(`${API_BASE_URL}/recommendations/cart`, {
       method: 'POST',
       headers: apiHeaders({ apiKey, adminId, storeId }),
-      body: JSON.stringify({ productIds, limit }),
+      body: JSON.stringify(orderType ? { productIds, limit, orderType } : { productIds, limit }),
       cache: 'no-store',
     });
 
@@ -673,6 +687,15 @@ export const createPaymentIntent = async (orderId: string, userId?: string, meth
     body: JSON.stringify({ order_id: orderId, user_id: userId, payment_method_type: method }),
   });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json?.message || 'Could not start the payment');
+  if (!res.ok) {
+    /*
+     * A coded refusal (PAYMENT_METHOD_UNAVAILABLE, server 0052) travels as an
+     * ApiError, so the checkout says it in the guest's language. Anything
+     * else stays a plain error, as before — its attempt key is kept for a retry.
+     */
+    const code = json?.code ?? json?.errorCode;
+    if (code) throw new ApiError(res.status, code, json?.data);
+    throw new Error(json?.message || 'Could not start the payment');
+  }
   return json?.data as { client_secret: string; stripe_account_id: string; amount: number };
 };

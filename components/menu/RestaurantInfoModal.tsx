@@ -8,7 +8,7 @@ import { useStore } from '~/contexts/store-context';
 import { formatPrice } from '@/lib/api';
 import { cn, formatEtaRange } from '~/lib/utils';
 import { berlinClockAt } from '~/lib/berlinTime';
-import { dayHoursText } from '~/lib/restaurantTimings';
+import { dayHoursText, type WeeklyHours } from '~/lib/restaurantTimings';
 import { formatStoreAddress } from '~/lib/storeAddress';
 
 type Props = { open: boolean; onClose: () => void };
@@ -52,6 +52,32 @@ function Missing({ label, compact }: { label: string; compact?: boolean }) {
   );
 }
 
+/**
+ * One week of hours, Monday first, today highlighted — the opening hours, and
+ * for a store with delivery hours of its own also the delivery hours. Lists
+ * the days that have hours entered, each with every window of the day.
+ */
+function HoursTable({ schedule, todayKey, labels, closedText }: { schedule: WeeklyHours; todayKey: string; labels: Record<string, string>; closedText: string }) {
+  const days = (schedule as Record<string, { open?: string | null; close?: string | null } | undefined> | null | undefined) || {};
+  const rows = DAY_ORDER.filter((k) => days[k]?.open && days[k]?.close);
+  return (
+    <div className='overflow-hidden rounded-[14px] bg-surface-3'>
+      {rows.map((k, i) => (
+        <div key={k} className={cn('flex items-center justify-between px-4 py-3', i < rows.length - 1 && 'border-b border-white/5', k === todayKey && 'bg-white/[0.04]')}>
+          <span className={cn('text-sm font-bold', k === todayKey ? 'text-white' : 'text-white')}>{labels[k]}</span>
+          <span className='text-sm font-semibold text-fg-secondary'>{dayHoursText(schedule, DAY_INDEX[k]) ?? closedText}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** A week of hours has at least one day with hours entered — what `HoursTable` would list. */
+const hasRows = (schedule: WeeklyHours) => {
+  const days = (schedule as Record<string, { open?: string | null; close?: string | null } | undefined> | null | undefined) || {};
+  return DAY_ORDER.some((k) => days[k]?.open && days[k]?.close);
+};
+
 export default function RestaurantInfoModal({ open, onClose }: Props) {
   const { t, language } = useLanguage();
   const storeInfo = useStore();
@@ -62,6 +88,12 @@ export default function RestaurantInfoModal({ open, onClose }: Props) {
   const todayKey = DAY_ORDER[(berlinClockAt().dayIndex + 6) % 7]; // 0=Sun → shift to Mon-first
 
   const rows = DAY_ORDER.filter((k) => timings[k]?.open && timings[k]?.close);
+  /*
+   * A store with delivery hours of its own shows two week tables, "Öffnungszeiten
+   * (Abholung)" and "Lieferzeiten". Without them the one table, exactly as before.
+   */
+  const deliveryTimings = (storeInfo?.deliveryTimings ?? null) as WeeklyHours;
+  const showDeliveryHours = !!deliveryTimings && hasRows(deliveryTimings);
   // "Adalbertstraße 36, 10179 Berlin" — not the admin's free text joined with postcode and city again.
   const address = formatStoreAddress(storeInfo);
 
@@ -148,24 +180,25 @@ export default function RestaurantInfoModal({ open, onClose }: Props) {
               )}
 
               {/* Opening hours */}
-              {(rows.length > 0 || SHOW_MISSING) && <h3 className='mb-3 mt-7 text-base font-extrabold'>{t.openingHours ?? 'Opening hours'}</h3>}
+              {(rows.length > 0 || SHOW_MISSING) && (
+                <h3 className='mb-3 mt-7 text-base font-extrabold'>{showDeliveryHours ? t.openingHoursPickup : (t.openingHours ?? 'Opening hours')}</h3>
+              )}
               {rows.length > 0 ? (
-                <div className='overflow-hidden rounded-[14px] bg-surface-3'>
-                  {rows.map((k, i) => (
-                    <div key={k} className={cn('flex items-center justify-between px-4 py-3', i < rows.length - 1 && 'border-b border-white/5', k === todayKey && 'bg-white/[0.04]')}>
-                      <span className={cn('text-sm font-bold', k === todayKey ? 'text-white' : 'text-white')}>{labels[k]}</span>
-                      <span className='text-sm font-semibold text-fg-secondary'>
-                        {dayHoursText(storeInfo?.timings, DAY_INDEX[k]) ?? t.closed}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                <HoursTable schedule={storeInfo?.timings as WeeklyHours} todayKey={todayKey} labels={labels} closedText={t.closed} />
               ) : (
                 SHOW_MISSING && (
                   <div className='rounded-[14px] bg-surface-3 px-4 py-3'>
                     <Missing label={t.fieldOpeningHours} />
                   </div>
                 )
+              )}
+
+              {/* Delivery hours — only for a store that has its own. */}
+              {showDeliveryHours && (
+                <>
+                  <h3 className='mb-3 mt-7 text-base font-extrabold'>{t.deliveryHours}</h3>
+                  <HoursTable schedule={deliveryTimings} todayKey={todayKey} labels={labels} closedText={t.closed} />
+                </>
               )}
 
               {/* Address & contact */}

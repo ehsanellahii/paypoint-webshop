@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 
+import { useAddress } from '~/contexts/address-context';
 import { useStore } from '~/contexts/store-context';
 import { useStoreNavigation } from '~/hooks/useStoreNavigation';
 import { checkPreorderSlot, clearPreorderSlot, parsePreorderSlot, preorderSlotKey, subscribePreorderSlot, type PreorderSlot } from '~/lib/preorderSlot';
-import { isRestaurantOpen } from '~/lib/restaurantTimings';
+import { hasDeliveryHours, orderingStatus, scheduleFor } from '~/lib/restaurantTimings';
 
 /**
  * Can the shop take this basket right now?
@@ -14,6 +15,11 @@ import { isRestaurantOpen } from '~/lib/restaurantTimings';
  * three cannot disagree about whether the kitchen is there. The server asks the
  * same question of the same opening hours and refuses the order outright — this
  * is what keeps a customer from reaching that refusal.
+ *
+ * "The opening hours" are those of the order type the guest has selected
+ * (`scheduleFor`): a delivery is judged by the store's delivery hours when it
+ * has set its own, pickup and dine-in by the normal hours. Without delivery
+ * hours both are the normal hours, exactly as before (1 Nov 2026).
  *
  * The rule (review fixes, 01.11.2026): ordering is closed only when the store
  * is closed now **and** there is no valid future pre-order slot. A slot is
@@ -30,6 +36,7 @@ import { isRestaurantOpen } from '~/lib/restaurantTimings';
 export function useOrderingWindow() {
   const storeInfo = useStore();
   const { slug } = useStoreNavigation();
+  const { orderType } = useAddress();
 
   /*
    * A slow tick, so the answer is judged against the current time rather than
@@ -70,11 +77,15 @@ export function useOrderingWindow() {
   // A slot saved in the old `dayOffset` shape parses to null: no slot.
   const stored = useMemo<PreorderSlot | null>(() => parsePreorderSlot(slotRaw), [slotRaw]);
 
+  // The hours of the selected order type — delivery hours for a delivery when the store has them.
+  const schedule = scheduleFor(storeInfo, orderType);
+
   // Judged on every render (the tick above re-renders), never cached.
-  const check = stored ? checkPreorderSlot(storeInfo?.timings, stored) : null;
+  const check = stored ? checkPreorderSlot(schedule, stored) : null;
   const stale = check === 'past' || check === 'invalid';
 
-  const storeClosed = !isRestaurantOpen(storeInfo?.timings);
+  const status = orderingStatus(storeInfo, orderType);
+  const storeClosed = status.state !== 'open';
   const slotValid = check === 'ok';
 
   // A passed slot is dropped for good, so no screen can send it. Remembered
@@ -99,8 +110,20 @@ export function useOrderingWindow() {
   const slotPassed = storeClosed && !slotValid && (check === 'past' || passedSlots.has(slug));
 
   return {
-    /** The shop's own state, regardless of what is in the basket. */
+    /** The shop's own state for the selected order type, regardless of what is in the basket. */
     storeClosed,
+    /**
+     * Delivery is selected and has not started yet (or is over for today)
+     * while the restaurant is open for pickup — not "closed": the guest can
+     * switch to pickup or pre-order a delivery. `opensAt` is today's delivery
+     * start, or null when no delivery is left today. Null in every other case,
+     * and always for a store without delivery hours.
+     */
+    deliveryLater: status.state === 'deliveryLater' ? { opensAt: status.deliveryOpensAt } : null,
+    /** The store takes pickup orders (and this is not a table order), so "switch to pickup" can be offered. */
+    pickupOffered: !storeInfo?.tableInfo?.token && (storeInfo?.settings?.orderTypes?.takeaway ?? true),
+    /** The slot is judged by delivery hours of the store's own, so a slot outside them is "outside the delivery hours". */
+    usesDeliveryHours: orderType === 'delivery' && hasDeliveryHours(storeInfo),
     /**
      * The chosen pre-order slot — never a passed one (that reads as no slot
      * and is being dropped). May still be outside the hours: see `slotOutsideHours`.

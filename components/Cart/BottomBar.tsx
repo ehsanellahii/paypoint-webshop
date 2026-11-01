@@ -14,7 +14,9 @@ export default function BottomBar({ onOpenCart }: { onOpenCart: () => void }) {
   const { t } = useLanguage();
   // A chosen pre-order slot keeps the bar live outside opening hours — the
   // basket is for that slot, not for now.
-  const { orderingClosed: isClosed } = useOrderingWindow();
+  // A delivery that only starts later while pickup is open is not "closed" — the cart says what to do.
+  const { orderingClosed, deliveryLater } = useOrderingWindow();
+  const isClosed = orderingClosed && !deliveryLater;
 
   if (totalItems === 0) return null;
 

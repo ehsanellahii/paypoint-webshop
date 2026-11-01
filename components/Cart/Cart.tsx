@@ -14,6 +14,7 @@ import { flyToCart } from '~/lib/flyToCart';
 import PreorderModal from '~/components/menu/PreorderModal';
 import { useCartTiming } from './useCartTiming';
 import { useStoreNavigation } from '~/hooks/useStoreNavigation';
+import { usePricingOrderType } from '~/hooks/usePricingOrderType';
 import SwipeToRemove from '~/components/ui/SwipeToRemove';
 
 interface CartProps {
@@ -81,19 +82,20 @@ export default function Cart({ isOpen: controlledIsOpen, onOpenChange, recommend
   // store has no pairing data yet.
   const [serverRecs, setServerRecs] = useState<MenuProduct[]>([]);
   const cartKey = cart.map((c) => c.product.id).join(',');
+  const pricingOrderType = usePricingOrderType();
 
   useEffect(() => {
     if (!isOpen || !storeInfo?.adminId || !storeInfo?.storeId) return;
     let cancelled = false;
 
-    fetchCartRecommendations(storeInfo.adminId, storeInfo.storeId, storeInfo.apiKey, cartKey ? cartKey.split(',') : [], 8).then((res) => {
+    fetchCartRecommendations(storeInfo.adminId, storeInfo.storeId, storeInfo.apiKey, cartKey ? cartKey.split(',') : [], 8, pricingOrderType).then((res) => {
       if (!cancelled) setServerRecs(res);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [isOpen, cartKey, storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey]);
+  }, [isOpen, cartKey, storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey, pricingOrderType]);
 
   // Nothing sold out is recommended — it could only be refused at checkout.
   const fallbackRecs = recommendations.filter((p) => !isSoldOut(p) && !cart.some((c) => c.product.id === p.id)).slice(0, 8);
@@ -185,14 +187,14 @@ export default function Cart({ isOpen: controlledIsOpen, onOpenChange, recommend
                           <div className='relative flex shrink-0 items-center gap-0.5 rounded-xl bg-surface-3 p-1'>
                             <button
                               onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                              aria-label='less'
+                              aria-label={t.decreaseQuantity}
                               className='wztouch flex h-[30px] w-[30px] items-center justify-center rounded-[9px] text-[18px] font-bold leading-none text-white transition active:scale-[0.82]'>
                               −
                             </button>
                             <span className='min-w-5 text-center text-sm font-extrabold'>{item.quantity}</span>
                             <button
                               onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                              aria-label='more'
+                              aria-label={t.increaseQuantity}
                               className='wztouch flex h-[30px] w-[30px] items-center justify-center rounded-[9px] text-base font-bold leading-none text-white transition active:scale-[0.82]'>
                               +
                             </button>
@@ -311,7 +313,20 @@ export default function Cart({ isOpen: controlledIsOpen, onOpenChange, recommend
                   </>
                 )}
               </button>
-              {timing.notice && <p className='mt-2.5 text-center text-[12.5px] font-semibold text-fg-secondary'>{timing.notice}</p>}
+              {timing.notice && (
+                <p className='mt-2.5 text-center text-[12.5px] font-semibold text-fg-secondary'>
+                  {timing.notice}
+                  {/* Delivery has not started but pickup is open: the way to order now. */}
+                  {timing.switchToPickup && (
+                    <>
+                      {' '}
+                      <button onClick={timing.switchToPickup} className='font-bold text-white hover:underline'>
+                        {t.switchToPickup}
+                      </button>
+                    </>
+                  )}
+                </p>
+              )}
               {!timing.notice && timing.slotLabel && (
                 <p className='mt-2.5 text-center text-[12.5px] font-semibold text-fg-secondary'>
                   {t.preorderedFor} {timing.slotLabel} ·{' '}

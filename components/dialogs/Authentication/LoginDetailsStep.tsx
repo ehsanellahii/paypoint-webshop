@@ -89,7 +89,7 @@ export default function LoginDetailsStep({ loading, values, errors, onChange, on
           <input
             value={values.phoneCode}
             onChange={(e) => onChange('phoneCode', e.target.value)}
-            aria-label='Country code'
+            aria-label={t.countryCode}
             inputMode='tel'
             disabled={loading}
             className='w-[52px] shrink-0 border-none bg-transparent text-[15px] font-semibold text-white'

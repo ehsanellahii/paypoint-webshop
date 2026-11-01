@@ -10,6 +10,7 @@ import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
 import { useAddress } from '~/contexts/address-context';
 import { useWalletAvailability } from '~/hooks/useWalletAvailability';
+import { isOnlineMethodShown, type OnlineMethodId } from '~/lib/onlinePaymentMethods';
 import type { IStoreInfo } from '~/lib/types';
 
 /**
@@ -146,12 +147,13 @@ const ONLINE_METHOD_IDS = new Set<PaymentMethod>(['cardWallets', 'applePay', 'go
 
 /**
  * Is a method on offer at this store at all? Device support for the wallets is
- * not part of this — the sheet asks Stripe for that when it opens.
+ * not part of this — the sheet asks Stripe for that when it opens. Online rows
+ * follow the server's `onlinePaymentMethods` (server 0052) when it sends them.
  */
-export function isPaymentMethodOffered(m: PaymentMethod, storeInfo: Pick<IStoreInfo, 'stripeChargesEnabled' | 'settings'> | null | undefined): boolean {
+export function isPaymentMethodOffered(m: PaymentMethod, storeInfo: Pick<IStoreInfo, 'stripeChargesEnabled' | 'settings' | 'onlinePaymentMethods'> | null | undefined): boolean {
   if (m === 'cash') return !!storeInfo?.settings?.paymentMethods?.cash;
   if (m === 'card') return !!storeInfo?.settings?.paymentMethods?.ecCardReader;
-  return ONLINE_METHOD_IDS.has(m) && canStorePayOnline(storeInfo);
+  return ONLINE_METHOD_IDS.has(m) && isOnlineMethodShown(m as OnlineMethodId, { canPayOnline: canStorePayOnline(storeInfo), flags: storeInfo?.onlinePaymentMethods });
 }
 
 /** The name to show once a method is chosen — used by the checkout summary rows. */
@@ -253,16 +255,21 @@ export default function PaymentSheet({ open, onClose, value, onSelect }: Props) 
    * after the customer had committed.
    */
   const canPayOnline = canStorePayOnline(storeInfo);
+  /*
+   * Server 0052: which online methods really work on the restaurant's Stripe
+   * account. Without them (older server) every online row stands or falls
+   * with `canPayOnline`, as described below.
+   */
+  const online = (id: OnlineMethodId) => isOnlineMethodShown(id, { canPayOnline, flags: storeInfo?.onlinePaymentMethods, wallets });
 
   const enabled: Record<MethodId, boolean> = {
     // Cash and the EC reader are the two the store payload actually toggles.
     cash: !!storeInfo?.settings?.paymentMethods?.cash,
     card: !!storeInfo?.settings?.paymentMethods?.ecCardReader,
     /*
-     * The store payload carries no per-method flag for these, so they stand or
-     * fall together with the connected account. Which of them the customer
-     * actually sees is then Stripe's decision, not ours: the payment sheet
-     * renders whatever the account has enabled.
+     * Since server 0052 the store payload says per method what the connected
+     * account can take (`onlinePaymentMethods`); an older server sends no
+     * flags and these stand or fall together with the connected account.
      */
     /*
      * One row for cards and wallets, rather than a row per wallet.
@@ -274,17 +281,17 @@ export default function PaymentSheet({ open, onClose, value, onSelect }: Props) 
      * offers exactly what the device and the connected account support, so
      * this row hands the decision to it.
      */
-    cardWallets: canPayOnline,
+    cardWallets: online('cardWallets'),
     /*
      * Only where the device can genuinely pay with them. Listing Apple Pay on
      * Android — which is what happened before — sends a customer down a route
      * their phone cannot take; `useWalletAvailability` asks Stripe rather than
-     * guessing from the user agent.
+     * guessing from the user agent. (`online` applies that device check.)
      */
-    applePay: canPayOnline && wallets.applePay,
-    googlePay: canPayOnline && wallets.googlePay,
-    paypal: canPayOnline,
-    klarna: canPayOnline,
+    applePay: online('applePay'),
+    googlePay: online('googlePay'),
+    paypal: online('paypal'),
+    klarna: online('klarna'),
   };
 
   const label: Record<MethodId, string> = {

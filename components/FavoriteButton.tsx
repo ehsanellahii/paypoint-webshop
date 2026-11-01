@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { isFavorite, toggleFavorite } from '~/lib/favorites';
 import { useStore } from '~/contexts/store-context';
 import { useUser } from '~/contexts/user-context';
+import { useLanguage } from '~/contexts/language-context';
 
 const HEART_PATH =
   'M12 20S3.5 14.5 3.5 8.8C3.5 6.2 5.5 4.3 7.9 4.3c1.5 0 2.9.8 3.6 2 .7-1.2 2.1-2 3.6-2 2.4 0 4.4 1.9 4.4 4.5C19.1 14.5 12 20 12 20z';
@@ -25,6 +26,7 @@ export default function FavoriteButton({
   size?: number;
 }) {
   const storeInfo = useStore();
+  const { t } = useLanguage();
   const { user, clearUser } = useUser();
   const customerId = user?._id;
 
@@ -99,7 +101,7 @@ export default function FavoriteButton({
   return (
     <button
       type='button'
-      aria-label={fav ? 'Remove from favorites' : 'Add to favorites'}
+      aria-label={fav ? t.removeFromFavorites : t.addToFavorites}
       className='relative flex h-[30px] w-[30px] items-center justify-center rounded-full bg-transparent transition active:scale-[0.82]'
       onClick={onClick}>
       {/* like-ring pop */}

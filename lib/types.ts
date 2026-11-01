@@ -5,6 +5,8 @@
  * Update these types if your backend API uses a different structure.
  */
 
+import type { OnlinePaymentMethods } from './onlinePaymentMethods';
+
 export interface Translation {
   id: string;
   name: string | null;
@@ -236,6 +238,13 @@ export interface IStoreInfo {
     saturday: StoreDayHours;
     sunday: StoreDayHours;
   } | null;
+  /**
+   * The store's own delivery hours, same shape as `timings` (server 0052).
+   * Null when the store has none — delivery then runs on `timings`, as it
+   * always did — and absent on an older server. Read through
+   * `scheduleFor` in `lib/restaurantTimings.ts`, never directly.
+   */
+  deliveryTimings?: IStoreInfo['timings'];
   settings: {
     logo: string | null;
     themeColors: {
@@ -254,6 +263,13 @@ export interface IStoreInfo {
    * storefront's side those are the same thing: no online payment.
    */
   stripeChargesEnabled?: boolean;
+  /**
+   * Which online methods really work on that account (server 0052): Apple /
+   * Google Pay only with the shop's domain registered there, Klarna once
+   * Stripe has activated it, PayPal never. Null from an older server — the
+   * shop then offers the online rows as before.
+   */
+  onlinePaymentMethods?: OnlinePaymentMethods | null;
   coordinates: { latitude: number; longitude: number } | null;
   adminGoogleApiKey: string;
   posGoogleApiKey: string;

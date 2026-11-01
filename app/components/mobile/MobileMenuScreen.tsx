@@ -11,7 +11,7 @@ import { cn, formatEtaRange, getImageURL, MenuProduct } from '~/lib/utils';
 import SmartImage from '~/lib/SmartImage';
 import { canOptimizeImage } from '~/lib/imageHosts';
 import { getStoreCover } from '~/lib/storeMedia';
-import { getTodayTimings, isRestaurantOpen, nextOpeningLabel } from '~/lib/restaurantTimings';
+import { deliveryLaterLabel, nextOpeningLabel, orderingStatus } from '~/lib/restaurantTimings';
 import { formatStoreAddress } from '~/lib/storeAddress';
 import { hasOptions, isSoldOut, requiresConfiguration } from '~/lib/productConfig';
 import { useStore } from '~/contexts/store-context';
@@ -20,6 +20,7 @@ import { useAddress } from '~/contexts/address-context';
 import { useLanguage } from '~/contexts/language-context';
 import { flyToCart } from '~/lib/flyToCart';
 import { useStoreNavigation } from '~/hooks/useStoreNavigation';
+import { usePickupNow } from '~/hooks/usePickupNow';
 import UserDrawer from '~/components/Header/UserDrawer';
 import DeliveryAddressModal from '~/components/dialogs/DeliveryAddressModal';
 import CartToast from '~/components/menu/CartToast';
@@ -49,7 +50,8 @@ export default function MobileMenuScreen() {
   const storeInfo = useStore();
   const { t } = useLanguage();
   const { cart, addToCart, totalItems, totalPrice } = useCart();
-  const { deliveryAddress, setDeliveryAddress, setOrderType, deliveryRate } = useAddress();
+  const { deliveryAddress, setDeliveryAddress, setOrderType, deliveryRate, orderType } = useAddress();
+  const pickupNow = usePickupNow();
   const { toProduct, toCart } = useStoreNavigation();
   const { showGate, dismissGate } = useZoneGate();
 
@@ -128,9 +130,17 @@ export default function MobileMenuScreen() {
   const logo = storeInfo?.settings?.logo || storeInfo?.logo || '';
   const cover = getStoreCover(storeInfo);
   const storeAddress = formatStoreAddress(storeInfo);
-  const open = isRestaurantOpen(storeInfo?.timings || {});
-  const { close } = getTodayTimings(storeInfo?.timings);
-  const opensNext = open ? null : nextOpeningLabel(storeInfo, t);
+  /*
+   * By the hours of the selected order type: a delivery reads the store's
+   * delivery hours when it has its own. Delivery not started yet while pickup
+   * is open is its own state, not "Geschlossen".
+   */
+  const status = orderingStatus(storeInfo, orderType);
+  const open = status.state === 'open';
+  const close = status.state === 'open' ? status.close : '';
+  const deliveryLater = status.state === 'deliveryLater' ? status : null;
+  const opensNext = status.state === 'closed' ? nextOpeningLabel(storeInfo, t, undefined, orderType) : null;
+  const pickupOffered = !storeInfo?.tableInfo?.token && (storeInfo?.settings?.orderTypes?.takeaway ?? true);
   // Same rule as the address context: no delivery at a table or when the store has it off.
   const deliveryOffered = !storeInfo?.tableInfo?.token && (storeInfo?.settings?.orderTypes?.delivery ?? false);
   // Menu states: nothing loaded at all, or loaded and empty. A failed refresh
@@ -249,10 +259,35 @@ export default function MobileMenuScreen() {
             )}
 
             <div className='mt-1.5 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-[12px]'>
+              {deliveryLater ? (
+                /*
+                 * Delivery starts later, pickup is open now: say when, and let
+                 * "Abholung jetzt möglich" switch to pickup (44px hit area via
+                 * ::after). A delivery time is pre-ordered from the cart.
+                 */
+                <>
+                  <span className='inline-flex items-center gap-1.5 text-[13px] font-bold text-warning'>
+                    <span className='h-[7px] w-[7px] rounded-full bg-warning' />
+                    {deliveryLaterLabel(deliveryLater.deliveryOpensAt, t)}
+                  </span>
+                  {pickupOffered && (
+                    <>
+                      <span className='text-[13px] font-bold text-muted-foreground opacity-60'>·</span>
+                      <button
+                        type='button'
+                        onClick={pickupNow}
+                        className="relative text-[13px] font-bold text-link after:absolute after:inset-x-0 after:-inset-y-[13px] after:content-['']">
+                        {t.pickupPossibleNow}
+                      </button>
+                    </>
+                  )}
+                </>
+              ) : (
               <span className={cn('inline-flex items-center gap-1.5 text-[13px] font-bold', open ? 'text-[#5fe39a]' : 'text-brand-red')}>
                 <span className={cn('h-[7px] w-[7px] rounded-full', open ? 'anim-pulse-ring bg-[#5fe39a]' : 'bg-brand-red')} />
                 {open ? `${t.openUntil} ${close}` : t.closed}
               </span>
+              )}
               {opensNext && (
                 <>
                   <span className='text-[13px] font-bold text-muted-foreground opacity-60'>·</span>

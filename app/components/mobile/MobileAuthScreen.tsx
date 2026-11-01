@@ -128,7 +128,7 @@ export default function MobileAuthScreen({ isOpen, handleOpenChange, isRegistrat
                     <input
                       value={a.formData.phoneCode}
                       onChange={(e) => a.handleChange('phoneCode', e.target.value)}
-                      aria-label='Country code'
+                      aria-label={t.countryCode}
                       inputMode='tel'
                       disabled={a.disabled}
                       className='w-[52px] shrink-0 border-none bg-transparent text-[15px] font-semibold text-white'

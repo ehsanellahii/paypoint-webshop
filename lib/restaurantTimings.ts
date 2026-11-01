@@ -256,7 +256,10 @@ export function nextOpening(timings: WeeklyHours, at: Date = new Date()): { dayO
 export const WEEKDAY_KEYS = ['weekdaySunday', 'weekdayMonday', 'weekdayTuesday', 'weekdayWednesday', 'weekdayThursday', 'weekdayFriday', 'weekdaySaturday'] as const;
 
 /** The slice of the translations `nextOpeningLabel` reads. */
-type OpeningLabels = Pick<Translations, 'opensTodayAt' | 'opensTomorrowAt' | 'opensOnDayAt' | (typeof WEEKDAY_KEYS)[number]>;
+type OpeningLabels = Pick<
+  Translations,
+  'opensTodayAt' | 'opensTomorrowAt' | 'opensOnDayAt' | 'deliveryOpensTodayAt' | 'deliveryOpensTomorrowAt' | 'deliveryOpensOnDayAt' | (typeof WEEKDAY_KEYS)[number]
+>;
 
 /**
  * "Öffnet heute um 23:00" / "Öffnet morgen um 11:00" / "Öffnet Montag um 11:00"
@@ -264,13 +267,105 @@ type OpeningLabels = Pick<Translations, 'opensTodayAt' | 'opensTomorrowAt' | 'op
  *
  * Shared by the closed menu header and the mobile restaurant-info sheet, so the
  * two cannot name different times.
+ *
+ * With `orderType` it is the hours of that order type (`scheduleFor`). A store
+ * with its own delivery hours then says when *delivery* starts — "Lieferung
+ * heute ab 14:00" — rather than when the doors open for pickup.
  */
-export function nextOpeningLabel(storeInfo: { timings?: WeeklyHours | IStoreInfo['timings'] } | null | undefined, t: OpeningLabels, at: Date = new Date()): string | null {
-  const next = nextOpening(storeInfo?.timings as WeeklyHours, at);
+export function nextOpeningLabel(storeInfo: ScheduleSource, t: OpeningLabels, at: Date = new Date(), orderType?: string | null): string | null {
+  const next = nextOpening(scheduleFor(storeInfo, orderType), at);
   if (!next) return null;
-  if (next.dayOffset === 0) return t.opensTodayAt.replace('{time}', next.time);
-  if (next.dayOffset === 1) return t.opensTomorrowAt.replace('{time}', next.time);
-  return t.opensOnDayAt.replace('{day}', t[WEEKDAY_KEYS[next.dayIndex]]).replace('{time}', next.time);
+  const delivery = orderType === 'delivery' && hasDeliveryHours(storeInfo);
+  if (next.dayOffset === 0) return (delivery ? t.deliveryOpensTodayAt : t.opensTodayAt).replace('{time}', next.time);
+  if (next.dayOffset === 1) return (delivery ? t.deliveryOpensTomorrowAt : t.opensTomorrowAt).replace('{time}', next.time);
+  return (delivery ? t.deliveryOpensOnDayAt : t.opensOnDayAt).replace('{day}', t[WEEKDAY_KEYS[next.dayIndex]]).replace('{time}', next.time);
+}
+
+/* ------------------------------------------------------------------------ */
+/*  Separate delivery hours (1 Nov 2026)                                     */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * What the schedule helpers read off the store: the normal hours, and the
+ * delivery hours when the store has set its own (server 0052 sends
+ * `deliveryTimings`, null while switched off — and an older server none).
+ */
+export type ScheduleSource =
+  | {
+      timings?: WeeklyHours | IStoreInfo['timings'];
+      deliveryTimings?: WeeklyHours | IStoreInfo['deliveryTimings'];
+    }
+  | null
+  | undefined;
+
+/** The store has delivery hours of its own, apart from its opening hours. */
+export function hasDeliveryHours(storeInfo: ScheduleSource): boolean {
+  return !!storeInfo?.deliveryTimings;
+}
+
+/**
+ * The hours that apply to an order type.
+ *
+ * Delivery uses the store's delivery hours when it has set them, otherwise the
+ * normal hours; pickup and dine-in always use the normal hours. A store
+ * without delivery hours therefore gets exactly the hours it got before.
+ *
+ * The one place this choice is made — the open badge, "Geöffnet bis", the next
+ * opening, the pre-order slots, the checkout button and the cart all read
+ * their hours through it, so no two of them can disagree. The server makes
+ * the same choice when it accepts or refuses the order
+ * (`storeOpeningHours.ts assertStoreAcceptsOrder`).
+ */
+export function scheduleFor(storeInfo: ScheduleSource, orderType?: string | null): WeeklyHours {
+  const normal = (storeInfo?.timings ?? null) as WeeklyHours;
+  if (orderType === 'delivery' && storeInfo?.deliveryTimings) return storeInfo.deliveryTimings as WeeklyHours;
+  return normal;
+}
+
+/**
+ * Where ordering stands for the selected order type at `at`.
+ *
+ *  - `open`: the hours of this order type are running; `close` is what the
+ *    header prints after "Geöffnet bis".
+ *  - `deliveryLater`: delivery is chosen and its own hours have not started
+ *    (or are over for today) while the restaurant is open for pickup. Not
+ *    "closed" — the guest can switch to pickup or pre-order a delivery.
+ *    `deliveryOpensAt` is today's delivery start ("14:00"), or null when no
+ *    delivery is left today.
+ *  - `closed`: nothing is open for this order type.
+ *
+ * A store without delivery hours is only ever `open` or `closed`, by its
+ * normal hours, exactly as before.
+ */
+export type OrderingStatus = { state: 'open'; close: string } | { state: 'deliveryLater'; deliveryOpensAt: string | null } | { state: 'closed' };
+
+export function orderingStatus(storeInfo: ScheduleSource, orderType?: string | null, at: Date = new Date()): OrderingStatus {
+  const schedule = scheduleFor(storeInfo, orderType);
+  if (isOpenAt(schedule, at)) return { state: 'open', close: getTodayTimings(schedule, at).close };
+  if (orderType === 'delivery' && hasDeliveryHours(storeInfo) && isOpenAt(storeInfo?.timings as WeeklyHours, at)) {
+    return { state: 'deliveryLater', deliveryOpensAt: deliveryStartLaterToday(storeInfo, at) };
+  }
+  return { state: 'closed' };
+}
+
+/**
+ * Today's delivery start, `HH:MM`, when delivery opens later on today's
+ * Berlin date — or null when it does not open again today (or the store has
+ * no delivery hours). Same answer as the server's `data.deliveryOpensAt` on a
+ * `DELIVERY_CLOSED_NOW` refusal.
+ */
+export function deliveryStartLaterToday(storeInfo: ScheduleSource, at: Date = new Date()): string | null {
+  if (!hasDeliveryHours(storeInfo)) return null;
+  const next = nextOpening(storeInfo?.deliveryTimings as WeeklyHours, at);
+  return next && next.dayOffset === 0 ? next.time : null;
+}
+
+/**
+ * The first half of the "delivery later" line: "Lieferung ab 14:00", or
+ * "Lieferung heute nicht mehr möglich" when no delivery is left today.
+ */
+export function deliveryLaterLabel(opensAt: string | null, t: Pick<Translations, 'deliveryFromTime' | 'deliveryNoMoreToday'>): string {
+  return opensAt ? t.deliveryFromTime.replace('{time}', opensAt) : t.deliveryNoMoreToday;
 }
 
 export { getTodayTimings, isRestaurantOpen };

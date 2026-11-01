@@ -6,7 +6,7 @@ import { Dialog } from '@base-ui/react/dialog';
 import { bookableDays, shortDate } from '~/lib/generateTimeSlotsWithinHours';
 import { formatSlotDay, formatSlotLabel, PREORDER_PICKER_LEAD_MINUTES, type PreorderSlot } from '~/lib/preorderSlot';
 import { dayKeyOf } from '~/lib/berlinTime';
-import { dayHoursText } from '~/lib/restaurantTimings';
+import { dayHoursText, scheduleFor } from '~/lib/restaurantTimings';
 import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
 import { useAddress } from '~/contexts/address-context';
@@ -35,6 +35,12 @@ export default function PreorderModal({ open, onClose, onConfirm, onStandard }: 
   const storeInfo = useStore();
   const { orderType } = useAddress();
   const isDelivery = orderType === 'delivery';
+  /*
+   * The hours of the selected order type: a delivery can only be booked inside
+   * the store's delivery hours when it has its own (both windows of a split
+   * day, and past midnight), pickup inside the normal hours.
+   */
+  const schedule = scheduleFor(storeInfo, orderType);
 
   // The chosen day as a Berlin date; null until the guest picks one.
   const [pickedDate, setPickedDate] = useState<string | null>(null);
@@ -48,7 +54,7 @@ export default function PreorderModal({ open, onClose, onConfirm, onStandard }: 
    */
   const days = useMemo(() => {
     const now = Date.now();
-    return bookableDays({ weeklyHours: storeInfo?.timings, now, intervalMinutes: 30, minLeadMinutes: PREORDER_PICKER_LEAD_MINUTES }).map((d) => ({
+    return bookableDays({ weeklyHours: schedule, now, intervalMinutes: 30, minLeadMinutes: PREORDER_PICKER_LEAD_MINUTES }).map((d) => ({
       ...d,
       label: formatSlotDay(d.date, { today: t.today, tomorrow: t.tomorrow }, language, now),
       short: shortDate(d.date),
@@ -56,13 +62,13 @@ export default function PreorderModal({ open, onClose, onConfirm, onStandard }: 
     }));
     // `open` is a dependency on purpose: it is what makes "now" current.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [language, t, storeInfo?.timings, open]);
+  }, [language, t, schedule, open]);
 
   // Until the guest picks a day, the first one that still has a time on offer.
   const day = days.find((d) => d.date === pickedDate) ?? days.find((d) => d.slots.length > 0) ?? days[0];
 
   // The selected day's opening hours (both windows on a split day), shown next to the time label.
-  const window = useMemo(() => (day ? (dayHoursText(storeInfo?.timings, day.dayIndex) ?? '') : ''), [day, storeInfo?.timings]);
+  const window = useMemo(() => (day ? (dayHoursText(schedule, day.dayIndex) ?? '') : ''), [day, schedule]);
 
   const times = day?.slots ?? [];
 

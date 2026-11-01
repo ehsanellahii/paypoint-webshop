@@ -121,14 +121,14 @@ function DesktopUserDrawer({ open, onClose }: Props) {
   // The customer's real referral code, issued by the backend on account creation.
   return (
     <div className='fixed inset-0 z-50'>
-      <button aria-label='Close menu' className='absolute inset-0 bg-black/55' onClick={onClose} />
+      <button aria-label={t.close} className='absolute inset-0 bg-black/55' onClick={onClose} />
 
       <aside
         ref={panelRef}
         tabIndex={-1}
         role='dialog'
         aria-modal='true'
-        aria-label='User menu'
+        aria-label={t.myAccount}
         className='anim-drawer absolute right-0 top-0 flex h-full w-[400px] max-w-[92vw] flex-col border-l border-border bg-card outline-none'>
         {/* Header with brand tiles */}
         <div className='relative h-[150px] shrink-0 overflow-hidden'>
@@ -140,7 +140,7 @@ function DesktopUserDrawer({ open, onClose }: Props) {
             ))}
           </div>
           <div className='absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.3),transparent_40%,var(--card))]' />
-          <button onClick={onClose} aria-label='Close' className='absolute right-[18px] top-[18px] flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur'>
+          <button onClick={onClose} aria-label={t.close} className='absolute right-[18px] top-[18px] flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur'>
             <X className='h-4 w-4' strokeWidth={2.2} />
           </button>
           <div className='absolute bottom-[18px] left-[22px]'>

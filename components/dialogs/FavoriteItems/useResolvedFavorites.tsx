@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { resolveFavorites } from '~/lib/api';
 import { FavoriteSnapshot, getFavorites, removeFavorites } from '~/lib/favorites';
 import { MenuProduct } from '~/lib/utils';
+import { usePricingOrderType } from '~/hooks/usePricingOrderType';
 
 type ProductCard = MenuProduct;
 export function useResolvedFavorites(storeKey: string, enabled: boolean, storeId: string, adminId: string, apiKey: string) {
   const [favorites, setFavorites] = useState<FavoriteSnapshot[]>([]);
   const [products, setProducts] = useState<ProductCard[]>([]);
   const [loading, setLoading] = useState(false);
+  const pricingOrderType = usePricingOrderType();
 
   // load from storage when dialog opens
   useEffect(() => {
@@ -30,7 +32,7 @@ export function useResolvedFavorites(storeKey: string, enabled: boolean, storeId
     (async () => {
       setLoading(true);
       try {
-        const res = await resolveFavorites(adminId, storeId, apiKey, ids);
+        const res = await resolveFavorites(adminId, storeId, apiKey, ids, pricingOrderType);
 
         if (cancelled) return;
 
@@ -52,7 +54,7 @@ export function useResolvedFavorites(storeKey: string, enabled: boolean, storeId
     return () => {
       cancelled = true;
     };
-  }, [storeKey, enabled, ids, adminId, storeId, apiKey]); // join keeps effect stable
+  }, [storeKey, enabled, ids, adminId, storeId, apiKey, pricingOrderType]); // join keeps effect stable
 
   return { favorites, setFavorites, products, loading };
 }

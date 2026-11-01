@@ -18,6 +18,7 @@ import { useCartTiming } from "~/components/Cart/useCartTiming";
 import SwipeToRemove from '~/components/ui/SwipeToRemove';
 import SmartImage from '~/lib/SmartImage';
 import { fetchCartRecommendations, formatPrice } from "~/lib/api";
+import { usePricingOrderType } from "~/hooks/usePricingOrderType";
 import { cn, getImageURL, type MenuProduct } from "~/lib/utils";
 import { useCart } from "~/contexts/cart-context";
 import { useAddress } from "~/contexts/address-context";
@@ -68,17 +69,18 @@ export default function MobileCartScreen() {
    */
   const [recs, setRecs] = useState<MenuProduct[]>([]);
   const cartKey = cart.map((c) => c.product.id).join(',');
+  const pricingOrderType = usePricingOrderType();
   useEffect(() => {
     if (!storeInfo?.adminId || !storeInfo?.storeId) return;
     let cancelled = false;
-    fetchCartRecommendations(storeInfo.adminId, storeInfo.storeId, storeInfo.apiKey, cartKey ? cartKey.split(',') : [], 4).then((res) => {
+    fetchCartRecommendations(storeInfo.adminId, storeInfo.storeId, storeInfo.apiKey, cartKey ? cartKey.split(',') : [], 4, pricingOrderType).then((res) => {
       if (!cancelled) setRecs(res.filter((p) => !isSoldOut(p) && !cart.some((c) => c.product.id === p.id)).slice(0, 4));
     });
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cartKey, storeInfo?.adminId, storeInfo?.storeId]);
+  }, [cartKey, storeInfo?.adminId, storeInfo?.storeId, pricingOrderType]);
 
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
@@ -291,7 +293,7 @@ export default function MobileCartScreen() {
                             ? remove(item.id)
                             : updateQuantity(item.id, item.quantity - 1)
                         }
-                        aria-label={item.quantity <= 1 ? t.remove : "less"}
+                        aria-label={item.quantity <= 1 ? t.remove : t.decreaseQuantity}
                         className="flex h-8 w-8 items-center justify-center rounded-[10px] text-white transition active:scale-[0.85]"
                       >
                         {item.quantity <= 1 ? (
@@ -310,7 +312,7 @@ export default function MobileCartScreen() {
                         onClick={() =>
                           updateQuantity(item.id, item.quantity + 1)
                         }
-                        aria-label="more"
+                        aria-label={t.increaseQuantity}
                         className="flex h-8 w-8 items-center justify-center rounded-[10px] text-white transition active:scale-[0.85]"
                       >
                         <Plus className="h-4 w-4" strokeWidth={2.4} />
@@ -388,6 +390,12 @@ export default function MobileCartScreen() {
               {!timing.notice && (
                 <button onClick={() => setPreorderOpen(true)} className="-my-2 -mr-2 h-11 shrink-0 px-2 text-[13px] font-bold text-white">
                   {t.edit}
+                </button>
+              )}
+              {/* Delivery has not started but pickup is open: the way to order now. */}
+              {timing.switchToPickup && (
+                <button onClick={timing.switchToPickup} className="-my-2 -mr-2 h-11 shrink-0 px-2 text-[13px] font-bold text-white">
+                  {t.switchToPickupShort}
                 </button>
               )}
             </div>

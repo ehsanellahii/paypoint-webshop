@@ -16,7 +16,7 @@ import type { PreorderSlot } from '~/components/menu/PreorderModal';
 import { ORDER_PAYMENT_METHOD, type PaymentMethod } from '~/components/checkout/PaymentSheet';
 import { savePlacedOrder } from '~/lib/lastOrder';
 import { checkPreorderSlot, clearPreorderSlot, formatSlotLabel, savePreorderSlot, slotInstant } from '~/lib/preorderSlot';
-import { isRestaurantOpen } from '~/lib/restaurantTimings';
+import { deliveryLaterLabel, deliveryStartLaterToday, hasDeliveryHours, isOpenAt, scheduleFor } from '~/lib/restaurantTimings';
 import { berlinHHMM } from '~/lib/berlinTime';
 import { useOrderingWindow } from '~/hooks/useOrderingWindow';
 import { apiErrorText, orderErrorText, voucherMinimumText } from '~/lib/errorMessages';
@@ -88,7 +88,14 @@ export function useCheckout() {
    * open, and the pre-order slot: one copy of it, which drops a slot that has
    * passed (the order then becomes "as soon as possible").
    */
-  const { storeClosed, slot: windowSlot, slotOutsideHours: windowSlotOutsideHours } = useOrderingWindow();
+  const {
+    storeClosed,
+    slot: windowSlot,
+    slotOutsideHours: windowSlotOutsideHours,
+    deliveryLater,
+    pickupOffered,
+    usesDeliveryHours,
+  } = useOrderingWindow();
 
   const isDineIn = !!storeInfo?.tableInfo?.token;
   const isDelivery = !isDineIn && orderType === 'delivery';
@@ -378,12 +385,25 @@ export function useCheckout() {
   const slotOutsideHours = isScheduled && windowSlotOutsideHours;
   const orderingClosed = storeClosed && !(isScheduled && !slotOutsideHours);
 
+  /*
+   * Delivery hours of the store's own (1 Nov 2026). All of the above is
+   * already judged by the selected order type's hours; this only changes the
+   * words when delivery has not started yet but the restaurant is open for
+   * pickup — "Lieferung erst ab 14:00", with the way out (pre-order a
+   * delivery time, or switch to pickup) instead of "Zurzeit geschlossen".
+   */
+  const deliveryWaitSentence = (opensAt: string | null) =>
+    `${opensAt ? t.deliveryOnlyFromToday.replace('{time}', opensAt) : t.deliveryNotAnyMoreToday} ${pickupOffered ? t.deliveryPreorderOrPickup : t.deliveryPreorderOnly}`;
+  const deliveryWaitText = deliveryLater ? deliveryWaitSentence(deliveryLater.opensAt) : '';
+  const slotClosedText = usesDeliveryHours ? t.preorderSlotOutsideDeliveryHours : t.preorderSlotClosed;
+
   const canPlace =
     missing.length === 0 && !belowMinimum && !deliveryUnavailable && !deliveryZonePending && !orderingClosed && !slotOutsideHours && cart.length > 0;
 
   /** The button's words without the price — for a layout that shows the price beside them. */
   const placeLabelShort = (() => {
     if (slotOutsideHours) return t.chooseAnotherTime ?? 'Choose another time';
+    if (orderingClosed && deliveryLater) return deliveryLaterLabel(deliveryLater.opensAt, t);
     if (orderingClosed) return t.storeClosedNow ?? t.closed ?? 'Closed';
     if (deliveryUnavailable) return t.weAreNotAvailableInYourArea;
     if (belowMinimum) return `${t.minimumOrderAmountIs} ${formatPrice(minimumOrderAmount)}`;
@@ -394,7 +414,8 @@ export function useCheckout() {
   const placeLabel = canPlace ? `${placeLabelShort} · ${formatPrice(grandTotal)}` : placeLabelShort;
 
   const placeHint = (() => {
-    if (slotOutsideHours) return t.preorderSlotClosed ?? '';
+    if (slotOutsideHours) return slotClosedText ?? '';
+    if (orderingClosed && deliveryLater) return deliveryWaitText;
     if (orderingClosed) return t.storeClosedCannotOrder ?? '';
     if (deliveryUnavailable) return t.weAreNotAvailableInYourArea;
     if (belowMinimum) return `${t.minimumOrderAmountIs} ${formatPrice(minimumOrderAmount)}`;
@@ -514,7 +535,7 @@ export function useCheckout() {
    * button, this turns "Store is closed" from an API into something the shop
    * would say — and covers every other coded refusal the order route raises.
    */
-  const translateOrderError = (e: unknown) => orderErrorText(e, language, formatPrice);
+  const translateOrderError = (e: unknown) => orderErrorText(e, language, formatPrice, { pickupOffered });
 
   const placeOrder = async () => {
     setTouched(true);
@@ -526,8 +547,10 @@ export function useCheckout() {
      * a render that may be minutes old, and a shop can close between filling
      * the form in and pressing the button.
      */
+    // The hours of the order type being placed: delivery hours for a delivery when the store has them.
+    const schedule = scheduleFor(storeInfo, pricingOrderType);
     if (isScheduled && scheduledSlot) {
-      const check = checkPreorderSlot(storeInfo?.timings, scheduledSlot);
+      const check = checkPreorderSlot(schedule, scheduledSlot);
       if (check === 'past' || check === 'invalid') {
         /*
          * The slot passed between the last render and this tap. It is
@@ -541,10 +564,19 @@ export function useCheckout() {
       }
       // Outside the hours: the guest picks another time.
       if (check !== 'ok') {
-        setSubmitError(t.preorderSlotClosed ?? 'The chosen pre-order time is outside the opening hours.');
+        setSubmitError(slotClosedText ?? 'The chosen pre-order time is outside the opening hours.');
         return;
       }
-    } else if (!isRestaurantOpen(storeInfo?.timings)) {
+    } else if (!isOpenAt(schedule)) {
+      /*
+       * Delivery not started yet (or over for today) while the restaurant is
+       * open for pickup: say that, not "closed". Judged now, not from the
+       * render, like the rest of this check.
+       */
+      if (isDelivery && hasDeliveryHours(storeInfo) && isOpenAt(scheduleFor(storeInfo, 'pickup'))) {
+        setSubmitError(deliveryWaitSentence(deliveryStartLaterToday(storeInfo)));
+        return;
+      }
       setSubmitError(t.storeClosedCannotOrder ?? 'The restaurant is closed right now, so no orders can be placed.');
       return;
     }
@@ -833,7 +865,7 @@ export function useCheckout() {
     // validation + submit
     touched, placing, submitError, emailValid, phoneValid, missing, payNow, setPayNow,
     verifyOpen, setVerifyOpen,
-    belowMinimum, deliveryUnavailable, storeClosed, slotOutsideHours, orderingClosed,
+    belowMinimum, deliveryUnavailable, storeClosed, slotOutsideHours, orderingClosed, deliveryLater,
     canPlace, placeLabel, placeLabelShort, placeHint, placeOrder,
   };
 }

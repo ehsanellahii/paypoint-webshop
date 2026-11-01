@@ -11,6 +11,10 @@ import type { NextConfig } from 'next';
  *   are served here too, and their other subdomains are not ours to decide).
  * - location only for the shop's own pages ("use my location" in the address
  *   dialog); everything else keeps the browser default.
+ * - payment for the shop and Stripe's frames (server 0052, Apple Pay / Google
+ *   Pay): Stripe's Google Pay guide asks for exactly this header, as "some web
+ *   clients, including Chrome on Android" need `self` in the payment allowlist.
+ *   https://docs.stripe.com/google-pay?platform=web
  *
  * Deliberately no full Content-Security-Policy yet: Stripe (js.stripe.com,
  * its frames and 3-D Secure redirects), Google Maps and Places, Firebase Auth
@@ -24,7 +28,7 @@ const SECURITY_HEADERS = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'Strict-Transport-Security', value: 'max-age=31536000' },
-  { key: 'Permissions-Policy', value: 'geolocation=(self)' },
+  { key: 'Permissions-Policy', value: 'geolocation=(self), payment=(self "https://js.stripe.com" "https://checkout.stripe.com")' },
 ];
 
 const nextConfig: NextConfig = {

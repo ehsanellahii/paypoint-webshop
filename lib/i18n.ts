@@ -226,6 +226,33 @@ export interface Translations {
   opensOnDayAt: string;
   openNowUntil: string;
   closedToday: string;
+  /*
+   * Separate delivery hours (1 Nov 2026): a store whose delivery starts later
+   * than its pickup. "{time}" and "{day}" are replaced.
+   */
+  /** Delivery has not started yet, pickup is open: "Lieferung ab 14:00". */
+  deliveryFromTime: string;
+  /** Delivery is over for today, pickup is open. */
+  deliveryNoMoreToday: string;
+  /** The second half of that line; tapping it switches to pickup. */
+  pickupPossibleNow: string;
+  /** Short form of `switchToPickup`, for the mobile cart's narrow button. */
+  switchToPickupShort: string;
+  /** The cart and checkout, under that line. */
+  deliveryPreorderHint: string;
+  deliveryOnlyFromToday: string;
+  deliveryNotAnyMoreToday: string;
+  deliveryPreorderOrPickup: string;
+  deliveryPreorderOnly: string;
+  /** A closed store, delivery selected: when delivery starts again. */
+  deliveryOpensTodayAt: string;
+  deliveryOpensTomorrowAt: string;
+  deliveryOpensOnDayAt: string;
+  /** A chosen delivery time outside the delivery hours. */
+  preorderSlotOutsideDeliveryHours: string;
+  /** Restaurant details: the two week tables of a store with delivery hours. */
+  openingHoursPickup: string;
+  deliveryHours: string;
   restaurantInfo: string;
   deliveryAndPickup: string;
   doWeDeliver: string;
@@ -459,6 +486,9 @@ export interface Translations {
   menuEmpty: string;
   minutesShort: string;
   decreaseQuantity: string;
+  addToFavorites: string;
+  countryCode: string;
+  removeFromFavorites: string;
   increaseQuantity: string;
   clearSearch: string;
   scrollLeft: string;
@@ -693,6 +723,21 @@ export const translations: Record<Language, Translations> = {
     opensOnDayAt: 'Opens {day} at {time}',
     openNowUntil: 'Open now · until {time}',
     closedToday: 'Closed',
+    deliveryFromTime: 'Delivery from {time}',
+    deliveryNoMoreToday: 'No more deliveries today',
+    pickupPossibleNow: 'Pickup available now',
+    switchToPickupShort: 'Pick up',
+    deliveryPreorderHint: 'You can pre-order your delivery for later.',
+    deliveryOnlyFromToday: 'Delivery is only available from {time} today.',
+    deliveryNotAnyMoreToday: 'Delivery is no longer available today.',
+    deliveryPreorderOrPickup: 'Pre-order your delivery for later or pick up now.',
+    deliveryPreorderOnly: 'Pre-order your delivery for later.',
+    deliveryOpensTodayAt: 'Delivery today from {time}',
+    deliveryOpensTomorrowAt: 'Delivery tomorrow from {time}',
+    deliveryOpensOnDayAt: 'Delivery {day} from {time}',
+    preorderSlotOutsideDeliveryHours: 'The chosen time is outside the delivery hours. Please pick another one.',
+    openingHoursPickup: 'Opening hours (pickup)',
+    deliveryHours: 'Delivery hours',
     restaurantInfo: 'Restaurant info',
     deliveryAndPickup: 'Delivery & pickup',
     doWeDeliver: 'Do we deliver to you?',
@@ -909,6 +954,9 @@ export const translations: Record<Language, Translations> = {
     menuEmpty: 'There are no dishes here yet.',
     minutesShort: 'min',
     decreaseQuantity: 'Decrease quantity',
+    addToFavorites: 'Add to favourites',
+    countryCode: 'Country code',
+    removeFromFavorites: 'Remove from favourites',
     increaseQuantity: 'Increase quantity',
     clearSearch: 'Clear search',
     scrollLeft: 'Scroll left',
@@ -1138,6 +1186,21 @@ export const translations: Record<Language, Translations> = {
     opensOnDayAt: 'Öffnet {day} um {time}',
     openNowUntil: 'Jetzt geöffnet · bis {time}',
     closedToday: 'Geschlossen',
+    deliveryFromTime: 'Lieferung ab {time}',
+    deliveryNoMoreToday: 'Lieferung heute nicht mehr möglich',
+    pickupPossibleNow: 'Abholung jetzt möglich',
+    switchToPickupShort: 'Abholen',
+    deliveryPreorderHint: 'Du kannst die Lieferung für später vorbestellen.',
+    deliveryOnlyFromToday: 'Lieferung ist heute erst ab {time} möglich.',
+    deliveryNotAnyMoreToday: 'Lieferung ist heute nicht mehr möglich.',
+    deliveryPreorderOrPickup: 'Bestell die Lieferung für später vor oder hol jetzt ab.',
+    deliveryPreorderOnly: 'Bestell die Lieferung für später vor.',
+    deliveryOpensTodayAt: 'Lieferung heute ab {time}',
+    deliveryOpensTomorrowAt: 'Lieferung morgen ab {time}',
+    deliveryOpensOnDayAt: 'Lieferung {day} ab {time}',
+    preorderSlotOutsideDeliveryHours: 'Die gewählte Zeit liegt außerhalb der Lieferzeiten. Bitte wähle eine andere.',
+    openingHoursPickup: 'Öffnungszeiten (Abholung)',
+    deliveryHours: 'Lieferzeiten',
     restaurantInfo: 'Restaurant-Info',
     deliveryAndPickup: 'Lieferung & Abholung',
     doWeDeliver: 'Liefern wir zu dir?',
@@ -1354,6 +1417,9 @@ export const translations: Record<Language, Translations> = {
     menuEmpty: 'Hier gibt es gerade noch keine Gerichte.',
     minutesShort: 'Min.',
     decreaseQuantity: 'Menge verringern',
+    addToFavorites: 'Zu Favoriten hinzufügen',
+    countryCode: 'Ländervorwahl',
+    removeFromFavorites: 'Aus Favoriten entfernen',
     increaseQuantity: 'Menge erhöhen',
     clearSearch: 'Suche leeren',
     scrollLeft: 'Nach links blättern',

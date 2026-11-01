@@ -2,6 +2,7 @@ import React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '~/lib/utils';
 import { X } from 'lucide-react';
+import { useLanguage } from '~/contexts/language-context';
 
 const DialogWrapper = ({
   isOpen,
@@ -22,6 +23,7 @@ const DialogWrapper = ({
   TitleClassName?: string;
   isWithCrossIcon?: boolean;
 }) => {
+  const { t } = useLanguage();
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent
@@ -31,7 +33,7 @@ const DialogWrapper = ({
             <DialogTitle className={cn('flex justify-between border-b border-border py-4 text-center font-display text-3xl font-extrabold md:py-8', TitleClassName)}>
               <div></div>
               {title}
-              <button className='rounded-full p-2 text-white hover:bg-white/10' onClick={() => handleOpenChange(false)} aria-label='Close'>
+              <button className='rounded-full p-2 text-white hover:bg-white/10' onClick={() => handleOpenChange(false)} aria-label={t.close}>
                 <X className='h-5 w-5' />
               </button>
             </DialogTitle>
