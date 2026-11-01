@@ -10,6 +10,7 @@ import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
 import { useAddress } from '~/contexts/address-context';
 import { useWalletAvailability } from '~/hooks/useWalletAvailability';
+import type { IStoreInfo } from '~/lib/types';
 
 /**
  * The methods checkout can hand back. Each maps to a value in the server's
@@ -128,6 +129,31 @@ const METHODS: MethodSpec[] = [
   { id: 'klarna', method: 'klarna', mark: <KlarnaMark />, tileClass: 'bg-[#ffb3c7]', group: 'other' },
 ];
 
+/*
+ * Online payment needs two things: Stripe willing to charge the restaurant's
+ * connected account, and our own publishable key to load Stripe.js with. A
+ * build without the key used to offer the online methods anyway and then open
+ * a payment sheet that spun forever.
+ */
+const STRIPE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '';
+
+/** Can this store take an online payment from this build of the shop? */
+export function canStorePayOnline(storeInfo: Pick<IStoreInfo, 'stripeChargesEnabled'> | null | undefined): boolean {
+  return !!storeInfo?.stripeChargesEnabled && !!STRIPE_PUBLISHABLE_KEY;
+}
+
+const ONLINE_METHOD_IDS = new Set<PaymentMethod>(['cardWallets', 'applePay', 'googlePay', 'paypal', 'klarna']);
+
+/**
+ * Is a method on offer at this store at all? Device support for the wallets is
+ * not part of this — the sheet asks Stripe for that when it opens.
+ */
+export function isPaymentMethodOffered(m: PaymentMethod, storeInfo: Pick<IStoreInfo, 'stripeChargesEnabled' | 'settings'> | null | undefined): boolean {
+  if (m === 'cash') return !!storeInfo?.settings?.paymentMethods?.cash;
+  if (m === 'card') return !!storeInfo?.settings?.paymentMethods?.ecCardReader;
+  return ONLINE_METHOD_IDS.has(m) && canStorePayOnline(storeInfo);
+}
+
 /** The name to show once a method is chosen — used by the checkout summary rows. */
 export function paymentMethodLabel(m: PaymentMethod, t: any): string {
   switch (m) {
@@ -180,12 +206,16 @@ export function serverPaymentMethodLabel(value: string | undefined, t: any): str
   }
 }
 
-/** The line under a chosen method, matching what the sheet itself shows. */
-export function paymentMethodSub(m: PaymentMethod, t: any, isDelivery: boolean): string {
+/**
+ * The line under a chosen method, matching what the sheet itself shows.
+ * Cash and the card reader are paid where the food is handed over: at the
+ * door, at the counter — or at the table.
+ */
+export function paymentMethodSub(m: PaymentMethod, t: any, isDelivery: boolean, isDineIn = false): string {
   switch (m) {
     case 'cash':
     case 'card':
-      return isDelivery ? t.onDelivery : t.onPickup;
+      return isDineIn ? (t.atTable ?? t.onPickup) : isDelivery ? t.onDelivery : t.onPickup;
     case 'cardWallets':
       return 'Visa, Mastercard, Amex';
     case 'applePay':
@@ -204,7 +234,8 @@ export default function PaymentSheet({ open, onClose, value, onSelect }: Props) 
   const storeInfo = useStore();
   const { orderType } = useAddress();
   const wallets = useWalletAvailability();
-  const isDelivery = orderType === 'delivery';
+  const isDineIn = !!storeInfo?.tableInfo?.token;
+  const isDelivery = !isDineIn && orderType === 'delivery';
 
   /*
    * The design's reference build hardcodes six methods with no processing
@@ -221,7 +252,7 @@ export default function PaymentSheet({ open, onClose, value, onSelect }: Props) 
    * and only then failed with "this store cannot take online payments yet" —
    * after the customer had committed.
    */
-  const canPayOnline = !!storeInfo?.stripeChargesEnabled;
+  const canPayOnline = canStorePayOnline(storeInfo);
 
   const enabled: Record<MethodId, boolean> = {
     // Cash and the EC reader are the two the store payload actually toggles.
@@ -273,8 +304,8 @@ export default function PaymentSheet({ open, onClose, value, onSelect }: Props) 
     googlePay: t.onlinePayment,
     paypal: t.onlinePayment,
     klarna: t.invoiceOrInstalments,
-    cash: isDelivery ? t.onDelivery : t.onPickup,
-    card: isDelivery ? t.onDelivery : t.onPickup,
+    cash: paymentMethodSub('cash', t, isDelivery, isDineIn),
+    card: paymentMethodSub('card', t, isDelivery, isDineIn),
   };
 
   const visible = METHODS.filter((m) => enabled[m.id]);

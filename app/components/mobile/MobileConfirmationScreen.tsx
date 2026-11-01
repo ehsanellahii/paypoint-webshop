@@ -35,7 +35,7 @@ export default function MobileConfirmationScreen() {
    * until the customer returns from Stripe — rendered as an empty page here
    * while desktop showed it correctly.
    */
-  const { orderRef, order, etaWindow, hydrated, waiting, unresolved, paymentFailed, refunded, isPast, isDelivery } = useConfirmation();
+  const { orderRef, order, etaWindow, hydrated, waiting, unresolved, lookupFailed, paymentFailed, refunded, isPast, isDelivery } = useConfirmation();
 
   const [accountOpen, setAccountOpen] = useState(false);
 
@@ -107,10 +107,10 @@ export default function MobileConfirmationScreen() {
                 <AlertCircle className='h-6 w-6 text-warning' strokeWidth={2.2} />
               </div>
               <div className='text-[20px] font-extrabold tracking-[-0.02em]'>
-                {t.orderNotConfirmed ?? 'We could not confirm your order'}
+                {lookupFailed ? t.orderLookupFailed : (t.orderNotConfirmed ?? 'We could not confirm your order')}
               </div>
               <p className='mt-2.5 text-[14px] font-medium leading-relaxed text-muted-foreground'>
-                {t.orderNotConfirmedSub ?? 'Your payment may have gone through, but we have not been able to confirm the order. Please contact the restaurant with the reference below before ordering again.'}
+                {lookupFailed ? t.orderLookupFailedSub : (t.orderNotConfirmedSub ?? 'Your payment may have gone through, but we have not been able to confirm the order. Please contact the restaurant with the reference below before ordering again.')}
               </p>
 
               <div className='mt-5 rounded-2xl border border-border bg-surface-2 px-4 py-3'>

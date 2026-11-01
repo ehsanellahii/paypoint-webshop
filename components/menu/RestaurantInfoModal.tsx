@@ -6,11 +6,15 @@ import { useAddress } from '~/contexts/address-context';
 import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
 import { formatPrice } from '@/lib/api';
-import { cn, formatEtaRange, getPostalRateInfo } from '~/lib/utils';
+import { cn, formatEtaRange } from '~/lib/utils';
+import { berlinClockAt } from '~/lib/berlinTime';
+import { dayHoursText } from '~/lib/restaurantTimings';
 
 type Props = { open: boolean; onClose: () => void };
 
 const DAY_ORDER = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
+/** 0 = Sunday, as the timings helpers count. */
+const DAY_INDEX: Record<(typeof DAY_ORDER)[number], number> = { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6, sunday: 0 };
 
 const DAY_LABELS: Record<'de' | 'en', Record<string, string>> = {
   de: { monday: 'Montag', tuesday: 'Dienstag', wednesday: 'Mittwoch', thursday: 'Donnerstag', friday: 'Freitag', saturday: 'Samstag', sunday: 'Sonntag' },
@@ -20,10 +24,11 @@ const DAY_LABELS: Record<'de' | 'en', Record<string, string>> = {
 export default function RestaurantInfoModal({ open, onClose }: Props) {
   const { t, language } = useLanguage();
   const storeInfo = useStore();
-  const { deliveryAddress } = useAddress();
+  const { deliveryRate } = useAddress();
   const timings = (storeInfo?.timings as Record<string, { open: string; close: string }> | null | undefined) || {};
   const labels = DAY_LABELS[language === 'de' ? 'de' : 'en'];
-  const todayKey = DAY_ORDER[(new Date().getDay() + 6) % 7]; // JS 0=Sun → shift to Mon-first
+  // Today in Berlin, where the store is — not on the device's own calendar.
+  const todayKey = DAY_ORDER[(berlinClockAt().dayIndex + 6) % 7]; // 0=Sun → shift to Mon-first
 
   const rows = DAY_ORDER.filter((k) => timings[k]?.open && timings[k]?.close);
   const address = [storeInfo?.address, storeInfo?.postalCode, storeInfo?.city].filter(Boolean).join(', ');
@@ -33,7 +38,7 @@ export default function RestaurantInfoModal({ open, onClose }: Props) {
   const branch = storeInfo?.name && storeInfo.name !== storeInfo?.brandName ? storeInfo.name : '';
   const name = storeInfo?.brandName || storeInfo?.name || '';
   const logo = storeInfo?.settings?.logo || storeInfo?.logo || '';
-  const rate = getPostalRateInfo(Number(deliveryAddress?.postalCode || 0), storeInfo?.postalRates || []);
+  const rate = deliveryRate;
 
   /*
    * The customer's own zone first, then the store-wide figure. Older store
@@ -125,7 +130,7 @@ export default function RestaurantInfoModal({ open, onClose }: Props) {
                     <div key={k} className={cn('flex items-center justify-between px-4 py-3', i < rows.length - 1 && 'border-b border-white/5', k === todayKey && 'bg-white/[0.04]')}>
                       <span className={cn('text-sm font-bold', k === todayKey ? 'text-white' : 'text-white')}>{labels[k]}</span>
                       <span className='text-sm font-semibold text-fg-secondary'>
-                        {timings[k].open} – {timings[k].close}
+                        {dayHoursText(storeInfo?.timings, DAY_INDEX[k]) ?? t.closed}
                       </span>
                     </div>
                   ))}

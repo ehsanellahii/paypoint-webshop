@@ -180,6 +180,9 @@ export interface Translation {
 //   mapsUrl: string;
 // }
 
+/** One weekday's hours as the store payload carries them. */
+export type StoreDayHours = { open: string; close: string; closed?: boolean | null; open2?: string | null; close2?: string | null };
+
 export interface IStoreInfo {
   /** The firm name, joined from the admin's user record — not the store row. */
   brandName: string;
@@ -206,6 +209,8 @@ export interface IStoreInfo {
   city: string;
   phone: string;
   email: string;
+  /** Imprint data from the store's admin record (server 0051); null on older servers. */
+  legal?: StoreLegal | null;
   slug: string;
   /**
    * The restaurant's own hostname when they are served on one, e.g. their own
@@ -217,14 +222,19 @@ export interface IStoreInfo {
   logo: string | null;
   /** Wide photograph behind the menu hero. Set per store in the admin panel. */
   coverImage: string | null;
+  /**
+   * Per weekday: `open`/`close`, optionally a second window `open2`/`close2`
+   * (split day) and `closed` (day ticked off). Read through
+   * `lib/restaurantTimings.ts`, never field by field.
+   */
   timings: {
-    monday: { open: string; close: string };
-    tuesday: { open: string; close: string };
-    wednesday: { open: string; close: string };
-    thursday: { open: string; close: string };
-    friday: { open: string; close: string };
-    saturday: { open: string; close: string };
-    sunday: { open: string; close: string };
+    monday: StoreDayHours;
+    tuesday: StoreDayHours;
+    wednesday: StoreDayHours;
+    thursday: StoreDayHours;
+    friday: StoreDayHours;
+    saturday: StoreDayHours;
+    sunday: StoreDayHours;
   } | null;
   settings: {
     logo: string | null;
@@ -273,4 +283,24 @@ export interface IStoreInfo {
     tableId: number;
     tableNumber: number;
   };
+  /**
+   * A `?t=` table token came with the request but the server refused it (old
+   * QR code, another store's code, a typo), so the shop was loaded without a
+   * table. The guest is not seated as dine-in; the UI can say why.
+   */
+  tableTokenInvalid?: boolean;
+}
+
+/** What the shop's imprint is built from (`GET /slugs/:slug` → `legal`, server 0051). Empty fields are null. */
+export interface StoreLegal {
+  companyName: string | null;
+  managingDirector: string | null;
+  commercialRegistrationNumber: string | null;
+  vatId: string | null;
+  street: string | null;
+  houseNumber: string | null;
+  postalCode: string | null;
+  city: string | null;
+  phone: string | null;
+  email: string | null;
 }

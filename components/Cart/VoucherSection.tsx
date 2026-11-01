@@ -4,10 +4,12 @@ import React from 'react';
 import { Check, Loader2, Tag, X } from 'lucide-react';
 import { useLanguage } from '@/contexts/language-context';
 import { useCart } from '~/contexts/cart-context';
-import { API_BASE_URL, formatPrice, apiHeaders } from '@/lib/api';
+import { formatPrice } from '@/lib/api';
 import { useUser } from '~/contexts/user-context';
-import { getTranslatedVoucherApiErrorMessage } from '~/lib/errorMessages';
+import { apiErrorText, voucherMinimumText } from '~/lib/errorMessages';
 import { useStore } from '~/contexts/store-context';
+import { useAddress } from '~/contexts/address-context';
+import { requestVoucherQuote } from '~/lib/voucher';
 
 type Props = {
   disabled?: boolean; // disable input + buttons when submitting order etc.
@@ -24,12 +26,15 @@ type Props = {
 export default function VoucherSection({ disabled, variant = 'card' }: Props) {
   const isPlain = variant === 'plain';
   const storeInfo = useStore();
-  const { user } = useUser();
-  const { applyVoucher, removeVoucher, appliedVoucher, discountAmount } = useCart();
-  const customerId = user?.id ?? user?._id;
-  const { t } = useLanguage();
+  const { user, clearUser } = useUser();
+  const { applyVoucher, removeVoucher, appliedVoucher, discountAmount, voucherBelowMinimum, voucherNotice, clearVoucherNotice } = useCart();
+  const { orderType } = useAddress();
+  // Guests may redeem too; a signed-in customer's token lets the server recognise their own vouchers.
+  const customerId = user?._id;
+  const { t, language } = useLanguage();
   const isVoucherApplied = Boolean(appliedVoucher);
   const { totalPrice } = useCart();
+  const pricingOrderType = storeInfo?.tableInfo?.token ? 'dineIn' : orderType;
 
   const [voucherCode, setVoucherCode] = React.useState('');
   const [voucherLoading, setVoucherLoading] = React.useState(false);
@@ -37,6 +42,7 @@ export default function VoucherSection({ disabled, variant = 'card' }: Props) {
 
   const onApplyVoucher = async () => {
     setVoucherError(null);
+    clearVoucherNotice();
 
     if (!storeInfo?.storeId) {
       // setVoucherError(t.storeNotFound ?? 'Store not found');
@@ -51,31 +57,35 @@ export default function VoucherSection({ disabled, variant = 'card' }: Props) {
 
     setVoucherLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/vouchers/apply`, {
-        method: 'POST',
-        headers: apiHeaders({ apiKey: storeInfo?.apiKey }),
-        body: JSON.stringify({
-          storeId: storeInfo.storeId,
-          customerId,
-          promoCode: code,
-          orderTotalAmount: totalPrice,
-        }),
+      // A read-only quote (server 0051): nothing is written until the order is placed.
+      const result = await requestVoucherQuote({
+        apiKey: storeInfo?.apiKey,
+        adminId: storeInfo?.adminId,
+        storeId: storeInfo?.storeId,
+        code,
+        subtotal: totalPrice,
+        orderType: pricingOrderType,
+        customerId,
+        authToken: user?.authToken,
       });
-      if (!res.ok) {
-        const resError = await res.json();
-        const errorMessage = getTranslatedVoucherApiErrorMessage(resError.errorCode, resError.message, t);
-        throw new Error(errorMessage ?? 'Failed to apply voucher');
+      // A session from before 0051 (or an expired one): signed out quietly, quoted as a guest.
+      if (result.authExpired) clearUser();
+      if (!result.ok) {
+        // The server's code in the customer's language — never its English message.
+        setVoucherError(
+          result.code === 'VOUCHER_MIN_ORDER' && result.minOrderAmount
+            ? voucherMinimumText(result.minOrderAmount, language, formatPrice)
+            : apiErrorText(result.code, language, 'voucher')
+        );
+        return;
       }
-      const responseData = await res.json();
-      const { voucher, discountAmount: discount } = responseData.data;
-      if (voucher && discount) {
-        applyVoucher({ voucher, discountAmount: discount });
+      applyVoucher(result.voucher);
+      const saved = result.voucher.quote?.discount ?? 0;
+      if (saved > 0) {
         // Picked up by <VoucherFlash />, wherever it is mounted.
-        window.dispatchEvent(new CustomEvent('voucher:applied', { detail: { code: voucher.code, saved: discount } }));
+        window.dispatchEvent(new CustomEvent('voucher:applied', { detail: { code: result.voucher.code, saved } }));
       }
       setVoucherCode('');
-    } catch (e) {
-      setVoucherError(e instanceof Error ? e.message : (t.voucherApplyFailed ?? 'Failed to apply voucher'));
     } finally {
       setVoucherLoading(false);
     }
@@ -85,6 +95,15 @@ export default function VoucherSection({ disabled, variant = 'card' }: Props) {
     setVoucherError(null);
     removeVoucher();
   };
+
+  /*
+   * The line under the applied code says why it is not counting, when it is
+   * not; and the error slot carries a refusal that took a voucher off.
+   */
+  const appliedSubline = voucherBelowMinimum
+    ? voucherMinimumText(appliedVoucher?.minimumOrderValue, language, formatPrice)
+    : appliedVoucher?.title || `${t.discount ?? 'Discount'}: -${formatPrice(discountAmount)}`;
+  const shownError = voucherError ?? (voucherNotice ? apiErrorText(voucherNotice, language, 'voucher') : null);
 
   return (
     <div className={isPlain ? 'space-y-3' : 'mt-7 space-y-3 rounded-[16px] border border-border bg-surface-1 p-4'}>
@@ -105,7 +124,7 @@ export default function VoucherSection({ disabled, variant = 'card' }: Props) {
           <div className='min-w-0 flex-1'>
             <div className='truncate text-[14.5px] font-extrabold'>{appliedVoucher?.code}</div>
             <div className='mt-px truncate text-[12px] font-medium text-muted-foreground'>
-              {appliedVoucher?.title || `${t.discount ?? 'Discount'}: -${formatPrice(discountAmount)}`}
+              {appliedSubline}
             </div>
           </div>
           <button
@@ -137,7 +156,7 @@ export default function VoucherSection({ disabled, variant = 'card' }: Props) {
             </button>
           </div>
 
-          {voucherError && <p className='text-sm text-brand-red'>{voucherError}</p>}
+          {shownError && <p className='text-sm text-brand-red'>{shownError}</p>}
         </>
       )}
     </div>

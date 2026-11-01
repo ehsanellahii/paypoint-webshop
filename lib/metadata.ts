@@ -12,13 +12,26 @@ import { getStoreBase } from './storeBase';
  * origin off the request keeps localhost, a preview deploy and production all
  * correct without a build-time base URL that someone has to remember to update.
  */
+/*
+ * A hostname (with an optional port) and nothing else. The value is a request
+ * header, so it is checked before it is pasted into URLs: a header carrying a
+ * path, credentials or a second URL falls back to the plain Host header.
+ * Nothing fetches from this origin — the icons read their fallback from disk
+ * (lib/storeIcon.ts) — it only names the page in its own metadata.
+ */
+const HOST_SHAPE = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?::\d{1,5})?$|^\[[0-9a-f:]+\](?::\d{1,5})?$/i;
+
 export async function requestOrigin(): Promise<string> {
   const h = await headers();
-  const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'localhost:3000';
+  const first = (v: string | null) => (v ?? '').split(',')[0].trim();
+  const forwardedHost = first(h.get('x-forwarded-host'));
+  const plainHost = first(h.get('host'));
+  const host = HOST_SHAPE.test(forwardedHost) ? forwardedHost : HOST_SHAPE.test(plainHost) ? plainHost : 'localhost:3000';
   // A proxy tells us what the visitor actually used; without one, only a local
   // address is safe to assume is plain http.
-  const forwarded = h.get('x-forwarded-proto');
-  const proto = forwarded ?? (/^(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(host) ? 'http' : 'https');
+  const forwarded = first(h.get('x-forwarded-proto'));
+  const isLocal = /^(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(host);
+  const proto = forwarded === 'http' || forwarded === 'https' ? forwarded : isLocal ? 'http' : 'https';
   return `${proto}://${host}`;
 }
 
@@ -75,6 +88,13 @@ type BuildArgs = {
  * different subset, so this fills all of them from one store payload rather
  * than letting each route guess.
  */
+/*
+ * Pages that belong to one guest — the checkout, an order confirmation, the
+ * account screens — are never indexed (robots.ts also asks crawlers to stay out).
+ */
+const PRIVATE_PATHS = ['/checkout', '/confirmation', '/account'];
+const isPrivatePath = (path: string) => PRIVATE_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
+
 export async function buildStoreMetadata({ store, slug, path = '', title }: BuildArgs): Promise<Metadata> {
   const origin = await requestOrigin();
   // '' on the restaurant's own domain, '/<slug>' on ours.
@@ -109,6 +129,7 @@ export async function buildStoreMetadata({ store, slug, path = '', title }: Buil
 
   return {
     metadataBase: new URL(origin),
+    ...(isPrivatePath(path) ? { robots: { index: false, follow: false } } : {}),
     icons: storeIcons(store, base),
     manifest: `${base}/site.webmanifest`,
     // `absolute` so the parent layout's title template does not append the

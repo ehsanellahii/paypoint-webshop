@@ -47,7 +47,8 @@ export default async function AccountPage({ params, searchParams }: { params: Pr
   // The menu's own address, which is the bare domain when the store is served
   // on one — `/${slug}` there would only bounce back through the proxy.
   const base = await getStoreBase(slug);
-  if (device !== 'mobile') redirect(token ? `${base || '/'}?t=${token}` : base || '/');
+  // Encoded: the token comes from the URL and must not smuggle in other parameters.
+  if (device !== 'mobile') redirect(token ? `${base || '/'}?t=${encodeURIComponent(String(token))}` : base || '/');
 
   const storeInfo = await getStoreData(slug, token as string);
   if (!storeInfo) notFound();

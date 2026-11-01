@@ -3,12 +3,15 @@
 import React from 'react';
 import { AlertCircle, Loader2, Ticket, X } from 'lucide-react';
 
-import { API_BASE_URL, formatPrice, apiHeaders } from '~/lib/api';
-import { getTranslatedVoucherApiErrorMessage } from '~/lib/errorMessages';
+import { formatPrice } from '~/lib/api';
+import { apiErrorText, voucherMinimumText } from '~/lib/errorMessages';
 import { useCart } from '~/contexts/cart-context';
 import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
+import { useAddress } from '~/contexts/address-context';
 import { useUser, type Voucher } from '~/contexts/user-context';
+import { requestVoucherQuote } from '~/lib/voucher';
+import { useCustomerDetails } from '~/hooks/useCustomerDetails';
 
 /** The stub's two lines: "10" over "% RABATT", "5" over "€". */
 function stubParts(v: { discountType?: string; discountValue?: number; minimumOrderValue?: number }, t: any) {
@@ -26,45 +29,65 @@ function stubParts(v: { discountType?: string; discountValue?: number; minimumOr
  * twice.
  */
 export default function MobileVouchersPanel() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const storeInfo = useStore();
-  const { user } = useUser();
-  const { applyVoucher, removeVoucher, appliedVoucher, discountAmount, totalPrice } = useCart();
-  const customerId = user?.id ?? user?._id;
+  const { user, clearUser } = useUser();
+  const { applyVoucher, removeVoucher, appliedVoucher, discountAmount, totalPrice, voucherBelowMinimum, voucherNotice, clearVoucherNotice } = useCart();
+  const { orderType } = useAddress();
+  // Guests may redeem too; the token (when signed in) identifies the customer.
+  const customerId = user?._id;
+  const pricingOrderType = storeInfo?.tableInfo?.token ? 'dineIn' : orderType;
 
   const [code, setCode] = React.useState('');
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const available = (user?.vouchers ?? []).filter((v) => v.code && v.code !== appliedVoucher?.code);
+  // The customer's own vouchers come from the server (the session keeps only who they are).
+  const details = useCustomerDetails();
+  const available = (details?.vouchers ?? []).filter((v) => v.code && v.code !== appliedVoucher?.code);
 
   const apply = async (raw: string) => {
     const value = raw.trim();
     if (!value || !storeInfo?.storeId) return;
     setError(null);
+    clearVoucherNotice();
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/vouchers/apply`, {
-        method: 'POST',
-        headers: apiHeaders({ apiKey: storeInfo?.apiKey }),
-        body: JSON.stringify({ storeId: storeInfo.storeId, customerId, promoCode: value, orderTotalAmount: totalPrice }),
+      // A read-only quote (server 0051): nothing is written until the order is placed.
+      const result = await requestVoucherQuote({
+        apiKey: storeInfo?.apiKey,
+        adminId: storeInfo?.adminId,
+        storeId: storeInfo?.storeId,
+        code: value,
+        subtotal: totalPrice,
+        orderType: pricingOrderType,
+        customerId,
+        authToken: user?.authToken,
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(getTranslatedVoucherApiErrorMessage(err.errorCode, err.message, t) ?? 'Failed');
+      // A session from before 0051 (or an expired one): signed out quietly, quoted as a guest.
+      if (result.authExpired) clearUser();
+      if (!result.ok) {
+        setError(
+          result.code === 'VOUCHER_MIN_ORDER' && result.minOrderAmount
+            ? voucherMinimumText(result.minOrderAmount, language, formatPrice)
+            : apiErrorText(result.code, language, 'voucher')
+        );
+        return;
       }
-      const { voucher, discountAmount: discount } = (await res.json()).data;
-      if (voucher && discount) {
-        applyVoucher({ voucher, discountAmount: discount });
-        window.dispatchEvent(new CustomEvent('voucher:applied', { detail: { code: voucher.code, saved: discount } }));
-      }
+      applyVoucher(result.voucher);
+      const saved = result.voucher.quote?.discount ?? 0;
+      if (saved > 0) window.dispatchEvent(new CustomEvent('voucher:applied', { detail: { code: result.voucher.code, saved } }));
       setCode('');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : (t.voucherApplyFailed ?? 'Failed to apply voucher'));
     } finally {
       setLoading(false);
     }
   };
+
+  // Why the applied code is not counting, or why one was taken off — in the existing text slots.
+  const appliedSubline = voucherBelowMinimum
+    ? voucherMinimumText(appliedVoucher?.minimumOrderValue, language, formatPrice)
+    : appliedVoucher?.title || `−${formatPrice(discountAmount)}`;
+  const shownError = error ?? (voucherNotice ? apiErrorText(voucherNotice, language, 'voucher') : null);
 
   const sectionLabel = (text: string, className = '') => (
     <div className={`text-[11px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground ${className}`}>{text}</div>
@@ -119,10 +142,10 @@ export default function MobileVouchersPanel() {
         </button>
       </div>
 
-      {error && (
+      {shownError && (
         <div className="mt-2.5 flex items-center gap-1.5 text-[12.5px] font-semibold text-error-text">
           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-          {error}
+          {shownError}
         </div>
       )}
 
@@ -138,7 +161,7 @@ export default function MobileVouchersPanel() {
                   <span className="text-[14.5px] font-black tracking-[0.02em] text-black">{appliedVoucher.code}</span>
                   <span className="rounded-md bg-black px-2 py-0.5 text-[10px] font-extrabold tracking-[0.04em] text-white">{t.voucherActive ?? 'ACTIVE'}</span>
                 </div>
-                <div className="mt-[3px] truncate text-[12px] font-semibold text-[#555]">{appliedVoucher.title || `−${formatPrice(discountAmount)}`}</div>
+                <div className="mt-[3px] truncate text-[12px] font-semibold text-[#555]">{appliedSubline}</div>
               </div>
               <button
                 onClick={() => removeVoucher()}

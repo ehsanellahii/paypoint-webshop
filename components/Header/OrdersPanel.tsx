@@ -4,8 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { useStoreNavigation } from '~/hooks/useStoreNavigation';
 import Image from 'next/image';
 import { ChevronDown, Loader2, Receipt, ChevronRight, ShoppingBag } from 'lucide-react';
-import { API_BASE_URL, formatPrice as apiFormatPrice, apiHeaders } from '@/lib/api';
-import { cn, getImageURL, MenuProduct } from '~/lib/utils';
+import { API_BASE_URL, formatPrice as apiFormatPrice, apiErrorFrom, apiHeaders, fetchMenuData, getAllProducts, isAuthFailure } from '@/lib/api';
+import { cn, getImageURL } from '~/lib/utils';
+import { reorderLines, type OrderLineLike } from '~/lib/cartReconcile';
+import { apiErrorText } from '~/lib/errorMessages';
+import { useAddress } from '~/contexts/address-context';
 import { useUser } from '~/contexts/user-context';
 import { useLanguage } from '@/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
@@ -14,7 +17,7 @@ import SmartImage from '~/lib/SmartImage';
 import OrderDetailModal from './OrderDetailModal';
 
 /** ---- Types ---- */
-type OrderAddOn = { id: string; uid: string; name: string; quantity: number; price: number };
+type OrderAddOn = { id: string; uid: string; name: string; quantity: number; price: number; parentGroupId?: string };
 type OrderItem = {
   id: string;
   uid: string;
@@ -27,6 +30,11 @@ type OrderItem = {
   totalPrice: number;
   image?: string;
   addOns?: OrderAddOn[];
+  /** The size, as the order recorded it. */
+  skuId?: string;
+  skuRef?: string;
+  skuName?: string | null;
+  note?: string;
 };
 type Coordinates = { lat: number; lng: number };
 type AddressDetails = { address: string; postalCode: string; coordinates?: Coordinates };
@@ -143,12 +151,14 @@ export default function OrdersPanel({
   /** Called after a reorder adds items to the cart (e.g. to close the drawer). */
   onReordered?: () => void;
 }) {
-  const { t } = useLanguage();
-  const { user } = useUser();
+  const { t, language } = useLanguage();
+  const { user, clearUser } = useUser();
   const storeInfo = useStore();
   const { addToCart } = useCart();
+  const { orderType } = useAddress();
   const logoURL = storeInfo?.settings?.logo || '';
-  const userId = user?.id ?? user?._id;
+  const userId = user?._id;
+  const authToken = user?.authToken;
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -164,25 +174,25 @@ export default function OrdersPanel({
    */
   const openOrder = useCallback((o: Order) => toConfirmation(o.collectionCode || String(o.orderNumber || o.id)), [toConfirmation]);
 
-  // Re-add an order's items to the cart. Add-ons aren't reconstructed (the
-  // history summary doesn't carry group ids); the server reprices on submit.
+  /*
+   * "Order again", against today's menu: each line's product, size and extras
+   * are looked up in the menu for this order type, so the cart gets current
+   * prices and nothing that is no longer sold. It used to copy the old name
+   * and price and drop the size and the extras.
+   */
   const reorder = useCallback(
-    (o: Order) => {
-      o.items?.forEach((it) => {
-        const product = {
-          _id: it.id,
-          id: it.id,
-          name: it.name,
-          currentPrice: it.currentPrice,
-          images: (it.image ? [it.image] : []) as string[],
-          haveCustomizations: false,
-          addOns: [],
-        } as unknown as MenuProduct;
-        addToCart(product, it.quantity || 1, {});
-      });
+    async (o: Order) => {
+      try {
+        const isDineIn = !!storeInfo?.tableInfo?.token;
+        const menu = await fetchMenuData(storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey, isDineIn ? 'dineIn' : orderType);
+        const { lines } = reorderLines((o.items ?? []) as OrderLineLike[], getAllProducts(menu));
+        lines.forEach((l) => addToCart(l.product, l.quantity, l.customizations, l.notes, l.sku));
+      } catch {
+        // No menu, no reorder — adding blind is what put stale prices in the cart.
+      }
       onReordered?.();
     },
-    [addToCart, onReordered]
+    [addToCart, onReordered, orderType, storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey, storeInfo?.tableInfo?.token]
   );
 
   const fetchOrders = useCallback(async () => {
@@ -195,7 +205,7 @@ export default function OrdersPanel({
     setLoading(true);
     setErr(null);
     try {
-      const list = await fetchUserOrders(userId, storeInfo?.apiKey || '');
+      const list = await fetchUserOrders(userId, storeInfo?.apiKey || '', authToken);
       setOrders(list);
       onLoaded?.(list.length);
       // Auto-expand the most recent order in the full (dialog) view only.
@@ -204,9 +214,15 @@ export default function OrdersPanel({
         setExpanded({ [first.id]: true });
       }
     } catch (e: any) {
-      setErr(e?.message || 'Failed to load orders');
       setOrders([]);
       onLoaded?.(0);
+      if (isAuthFailure(e)) {
+        // The session is gone: sign out, and the panel shows its "please log in" state.
+        clearUser();
+        return;
+      }
+      // Never the server's text — see lib/errorMessages.ts.
+      setErr(apiErrorText(e?.code, language, 'load'));
     } finally {
       setLoading(false);
     }
@@ -217,7 +233,6 @@ export default function OrdersPanel({
     if (active) fetchOrders();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, userId]);
-  console.log('compact', compact);
   return (
     <div className={wrapperClassName ?? 'flex-1 overflow-y-auto scrollbar-hide px-2 py-4 md:px-6'}>
       {!userId ? (
@@ -444,15 +459,15 @@ function OrdersEmpty({ t, onBrowse }: { t: any; onBrowse?: () => void }) {
  * the same call — the integration API has no "one order by id" endpoint, so a
  * details view fetches the list and picks its order out of it.
  */
-export async function fetchUserOrders(userId: string, apiKey: string): Promise<Order[]> {
+export async function fetchUserOrders(userId: string, apiKey: string, authToken?: string): Promise<Order[]> {
+  // The customer's own token (server 0051): the id in the URL must be the token's.
   const res = await fetch(`${API_BASE_URL}/orders/${encodeURIComponent(userId)}`, {
     method: 'GET',
-    headers: apiHeaders({ apiKey }),
+    headers: apiHeaders({ apiKey, authToken }),
     cache: 'no-store',
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(text || `Request failed (${res.status})`);
+    throw await apiErrorFrom(res);
   }
   const data = (await res.json()) as OrdersResponse | Order[];
   return Array.isArray(data) ? data : (data?.data ?? []);

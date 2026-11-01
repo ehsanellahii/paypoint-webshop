@@ -9,6 +9,7 @@ import { useLanguage } from '~/contexts/language-context';
 import { useCart } from '~/contexts/cart-context';
 import { flyToCart } from '~/lib/flyToCart';
 import SmartImage from '~/lib/SmartImage';
+import { isSoldOut, requiresConfiguration } from '~/lib/productConfig';
 
 interface ProductCardProps {
   product: MenuProduct;
@@ -50,11 +51,11 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
 
   // Products with a required customization group must be configured in the
   // modal — and so must anything with a size to pick, since the price depends
-  // on it and there is nothing sensible to add without an answer.
+  // on it and there is nothing sensible to add without an answer. A sold-out
+  // product opens the modal too, which cannot add it.
   const skus = product.skus ?? [];
   const hasSizeChoice = skus.length > 1;
-  const requiresModal =
-    hasSizeChoice || (product.haveCustomizations && (product.addOns || []).some((g) => (g.minimumQuantity ?? 0) > 0));
+  const requiresModal = requiresConfiguration(product) || isSoldOut(product);
 
   // The "simple" (no-customization) cart line for this product.
   const simpleLine = cart.find((i) => i.product.id === product.id && Object.keys(i.customizations || {}).length === 0);

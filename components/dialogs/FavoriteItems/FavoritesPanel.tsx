@@ -10,6 +10,7 @@ import FavoriteButton from '~/components/FavoriteButton';
 import SmartImage from '~/lib/SmartImage';
 import { getImageURL, MenuProduct } from '~/lib/utils';
 import { formatPrice } from '@/lib/api';
+import { isSoldOut, requiresConfiguration } from '~/lib/productConfig';
 import { getFavoriteIds } from '~/lib/favorites';
 
 /**
@@ -37,8 +38,8 @@ export default function FavoritesPanel({ active, onOpenProduct, onBrowse }: { ac
   const visible = products.filter((p) => favIds.has(String(p._id ?? p.id)));
 
   const add = (p: MenuProduct) => {
-    const requiresModal = p.haveCustomizations && (p.addOns || []).some((g) => (g.minimumQuantity ?? 0) > 0);
-    if (requiresModal) {
+    // A size or a required option to choose (or nothing left to sell): the product view decides.
+    if (requiresConfiguration(p) || isSoldOut(p)) {
       onOpenProduct(p);
       return;
     }

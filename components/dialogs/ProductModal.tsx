@@ -8,6 +8,7 @@ import { Dialog } from '@base-ui/react/dialog';
 import { AddOnGroup, cn, getImageURL, MenuProduct } from '~/lib/utils';
 import { useLanguage } from '~/contexts/language-context';
 import SmartImage from '~/lib/SmartImage';
+import { isSoldOut } from '~/lib/productConfig';
 import { useStore } from '~/contexts/store-context';
 
 type CartItemCustomization = Record<string, Record<string, number>>; // sectionId -> { optionId -> qty }
@@ -129,6 +130,8 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
   };
 
   const handleAddToCart = () => {
+    // Every size sold out: nothing to add (the menu card opens this modal for it).
+    if (isSoldOut(product)) return;
     const v = validateCustomizations();
     if (!v.ok) {
       setErrors(v.errors);
@@ -347,6 +350,7 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
               </div>
               <button
                 onClick={handleAddToCart}
+                disabled={isSoldOut(product)}
                 type='button'
                 className='flex h-[52px] flex-1 items-center justify-center gap-2.5 rounded-[15px] bg-primary text-[15px] font-extrabold text-selected-text transition active:scale-[0.98]'>
                 {t.add} · {formatPrice(calculateTotalPrice())}

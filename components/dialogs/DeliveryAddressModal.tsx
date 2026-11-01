@@ -5,6 +5,7 @@ import { Dialog } from '@base-ui/react/dialog';
 import { AlertCircle, Loader2, MapPin, Phone, Plus, Search, X } from 'lucide-react';
 import { cn } from '~/lib/utils';
 import { checkDeliveryZone, type DeliveryZone } from '~/lib/api';
+import { localDeliveryRate, zoneDelivers } from '~/lib/deliveryZone';
 import { isKeyRefused, MAPS_AUTH_ERROR, useGoogleMaps } from '~/hooks/useGoogleMaps';
 import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
@@ -12,6 +13,18 @@ import { useAddress, type DeliveryAddress } from '~/contexts/address-context';
 import { useIsMobile } from '~/contexts/device-context';
 import { addressPredictionRequest, countryCodeOf, isGermanAddress } from '~/lib/addressSearch';
 import MobileSheet from '~/components/mobile/MobileSheet';
+
+/** A "not in the delivery area" answer made here (abroad, or the lookup failed and the local table says no). */
+const OUT_OF_AREA: DeliveryZone = {
+  isAvailable: false,
+  hasZones: true,
+  postalCode: '',
+  deliveryCharges: null,
+  minimumOrderAmount: null,
+  deliveryTime: null,
+  priorityDeliveryCharges: null,
+  priorityDeliveryTime: null,
+};
 
 type AddressParts = {
   formattedAddress: string;
@@ -87,11 +100,10 @@ function shortLine(a: DeliveryAddress) {
 }
 
 export default function DeliveryAddressModal({ open, onClose, onSelect, googleApiKey, onSuccess }: DeliveryAddressModalProps) {
-  console.log('Googleapikey', googleApiKey);
   const isMobile = useIsMobile();
   const { t } = useLanguage();
   const storeInfo = useStore();
-  const { deliveryAddress, savedAddresses, saveAddress, removeSavedAddress, setOrderType } = useAddress();
+  const { deliveryAddress, savedAddresses, saveAddress, removeSavedAddress, setOrderType, rememberDeliveryZone } = useAddress();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   // 'list' shows the address book, 'form' the search + save flow. The sheet
@@ -150,16 +162,7 @@ export default function DeliveryAddressModal({ open, onClose, onSelect, googleAp
     // Outside Germany is outside every delivery area — also for a store that
     // has no zones set, where the server would say yes to any postcode.
     if (!isGermanAddress(picked)) {
-      setZone({
-        isAvailable: false,
-        hasZones: true,
-        postalCode: postalCode ?? '',
-        deliveryCharges: null,
-        minimumOrderAmount: null,
-        deliveryTime: null,
-        priorityDeliveryCharges: null,
-        priorityDeliveryTime: null,
-      });
+      setZone({ ...OUT_OF_AREA, postalCode: postalCode ?? '' });
       return;
     }
 
@@ -184,14 +187,14 @@ export default function DeliveryAddressModal({ open, onClose, onSelect, googleAp
       .catch((error) => {
         if (cancelled) return;
         /*
-         * A lookup that could not run must not turn into a rejection: refusing
-         * the sale because our own call failed is the worse of the two
-         * mistakes, and this is the only gate — order creation does not check
-         * the zone again. So a store outage lets a few out-of-area addresses
-         * through, which the kitchen sees and can phone about.
+         * The lookup could not run. The store's own rate table stands in, as
+         * on every other screen: a postcode in it goes through, anything else
+         * — and every postcode of a store without zones — is outside the area.
+         * The order route checks the area again (`DELIVERY_AREA`).
          */
-        console.error('[delivery zone] lookup failed, letting the address through', error);
-        setZone(null);
+        console.error('[delivery zone] lookup failed, using the local rate table', error);
+        const local = localDeliveryRate(postalCode, storeInfo?.postalRates);
+        setZone(local.isAvailable ? null : { ...OUT_OF_AREA, postalCode });
       })
       .finally(() => {
         if (!cancelled) setZoneChecking(false);
@@ -200,11 +203,11 @@ export default function DeliveryAddressModal({ open, onClose, onSelect, googleAp
     return () => {
       cancelled = true;
     };
-  }, [picked, storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey]);
+  }, [picked, storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey, storeInfo?.postalRates]);
 
   // Only once there is an answer. While the call is in flight the panel stays
   // hidden, so a valid address never flashes "outside our delivery area".
-  const outOfZone = !!picked && !!zone && !zone.isAvailable;
+  const outOfZone = !!picked && !!zone && !zoneDelivers(zone);
 
   const resetForm = () => {
     autofilled.current = null;
@@ -293,6 +296,9 @@ export default function DeliveryAddressModal({ open, onClose, onSelect, googleAp
   const commit = (a: AddressParts, withLabel?: string) => {
     const plain = toDeliveryAddress(a);
     saveAddress(plain, withLabel);
+    // Hand the zone answer for this address to the address context, so the
+    // menu, cart and checkout use it instead of asking again.
+    if (zone && a === picked && plain.postalCode) rememberDeliveryZone(plain.postalCode, zone);
     select(plain);
   };
 

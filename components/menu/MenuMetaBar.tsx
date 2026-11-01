@@ -4,7 +4,7 @@ import { Bike, ShoppingBag, Clock } from 'lucide-react';
 import { useAddress } from '~/contexts/address-context';
 import { useStore } from '~/contexts/store-context';
 import { useLanguage } from '~/contexts/language-context';
-import { formatEtaRange, getPostalRateInfo } from '~/lib/utils';
+import { formatEtaRange } from '~/lib/utils';
 import { formatPrice } from '@/lib/api';
 import { getTodayTimings, isRestaurantOpen } from '~/lib/restaurantTimings';
 import { cn } from '~/lib/utils';
@@ -19,7 +19,7 @@ type Props = {
 export default function MenuMetaBar({ onRequireAddress, onOpenInfo, onOpenPreorder, preorderLabel }: Props) {
   const { t } = useLanguage();
   const storeInfo = useStore();
-  const { orderType, setOrderType, deliveryAddress } = useAddress();
+  const { orderType, setOrderType, deliveryAddress, deliveryRate } = useAddress();
 
   const isPickupAvailable = storeInfo?.settings?.orderTypes?.takeaway ?? true;
   const isDeliveryAvailable = storeInfo?.settings?.orderTypes?.delivery ?? false;
@@ -29,7 +29,8 @@ export default function MenuMetaBar({ onRequireAddress, onOpenInfo, onOpenPreord
   const open = isRestaurantOpen(storeInfo?.timings || {});
   const { close } = getTodayTimings(storeInfo?.timings);
 
-  const rate = getPostalRateInfo(Number(deliveryAddress?.postalCode || 0), storeInfo?.postalRates || []);
+  // The server's delivery terms for this address, as checkout uses them.
+  const rate = deliveryRate;
 
   const chooseDelivery = () => {
     if (!deliveryAddress) onRequireAddress();

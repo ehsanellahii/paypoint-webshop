@@ -35,3 +35,23 @@ export function splitPhone(raw: string | undefined | null, fallbackCode = DEFAUL
   // A leading trunk `0` is national notation and is not part of the number.
   return { code: fallbackCode, number: digits.replace(/^0+/, '') };
 }
+
+/**
+ * A phone number as typed, cleaned for the API: spaces, dashes, brackets,
+ * slashes and dots go, a leading `+` stays. "(030) 123 45-67", "030/1234567"
+ * and "0151.2345678" are how people write numbers; the server's validator used
+ * to refuse the brackets, slashes and dots outright, so such an order could
+ * not be placed. In international notation a German "(0)" is the trunk prefix
+ * that is not dialled ("+49 (0) 151 …" is "+49151…") and is dropped with its
+ * brackets — the same reading as the server's `strippedPhone`.
+ */
+export function normalizeTypedPhone(raw: string | null | undefined): string {
+  let value = (raw ?? '').trim();
+  if (/^(\+|00)/.test(value)) value = value.replace(/\(\s*0\s*\)/g, '');
+  return value.replace(/[\s\-()./]/g, '');
+}
+
+/** Is this a phone number we can send — digits with an optional leading `+`, at least six of them? */
+export function isTypablePhone(raw: string | null | undefined): boolean {
+  return /^\+?\d{6,}$/.test(normalizeTypedPhone(raw));
+}

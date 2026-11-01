@@ -10,7 +10,8 @@ import { useAddress, type DeliveryAddress } from '~/contexts/address-context';
 import { useLanguage } from '~/contexts/language-context';
 import { cn } from '~/lib/utils';
 import { getStoreCover } from '~/lib/storeMedia';
-import { checkDeliveryZone, formatPrice } from '@/lib/api';
+import { checkDeliveryZone, formatPrice, type DeliveryZone } from '@/lib/api';
+import { localDeliveryRate, zoneDelivers } from '~/lib/deliveryZone';
 import { addressGeocodeRequest, addressPredictionRequest, countryCodeOf, isGermanAddress } from '~/lib/addressSearch';
 
 function parseAddress(place: google.maps.places.PlaceResult | google.maps.GeocoderResult): DeliveryAddress {
@@ -66,6 +67,8 @@ type Result =
       address: DeliveryAddress;
       min: number | null;
       fee: number | null;
+      /** The server's answer, kept with the address so no screen asks again. */
+      zone?: DeliveryZone | null;
     }
   | { status: 'no'; address: DeliveryAddress }
   | null;
@@ -74,7 +77,7 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
   const { t } = useLanguage();
   const isMobile = useIsMobile();
   const storeInfo = useStore();
-  const { setDeliveryAddress, setOrderType, saveAddress } = useAddress();
+  const { setDeliveryAddress, setOrderType, saveAddress, rememberDeliveryZone } = useAddress();
   const { loaded, error: mapsError } = useGoogleMaps(storeInfo?.posGoogleApiKey || '');
 
   const [query, setQuery] = useState('');
@@ -187,23 +190,27 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
       console.log('[delivery zone] result', { requested: postalCode, ...zone });
 
       setResult(
-        zone.isAvailable
+        zoneDelivers(zone)
           ? {
               status: 'ok',
               address,
               min: zone.minimumOrderAmount,
               fee: zone.deliveryCharges,
+              zone,
             }
           : { status: 'no', address },
       );
     } catch (error) {
       /*
-       * Let them through rather than refuse over our own outage. This gate is
-       * in front of the entire menu, so a failed lookup that answered "no"
-       * would close the shop.
+       * The server could not be asked: the store's own rate table (shipped
+       * with the page, the same table the server reads) stands in, as on every
+       * other screen. A store without zones delivers nowhere there either, so
+       * this never turns into "delivers everywhere"; a "no" still leaves
+       * pickup open.
        */
-      console.error('[delivery zone] lookup failed, letting the address through', error);
-      setResult({ status: 'ok', address, min: null, fee: null });
+      console.error('[delivery zone] lookup failed, using the local rate table', error);
+      const local = localDeliveryRate(postalCode ?? '', storeInfo?.postalRates);
+      setResult(local.isAvailable ? { status: 'ok', address, min: local.minimumOrderAmount, fee: local.deliveryCharges } : { status: 'no', address });
     } finally {
       setChecking(false);
     }
@@ -296,6 +303,9 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
      * after the customer had entered one.
      */
     saveAddress(result.address);
+    // The answer just shown is the one checkout will use — not a second
+    // opinion from the page's rate table.
+    if (result.zone && result.address.postalCode) rememberDeliveryZone(result.address.postalCode, result.zone);
     setDeliveryAddress(result.address); // also sets orderType = delivery
     setTimeout(() => onDone(true), 600);
   };

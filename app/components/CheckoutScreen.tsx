@@ -8,7 +8,7 @@ import { useCheckout, TIP_VALUES } from '~/hooks/useCheckout';
 import { useStoreNavigation } from '~/hooks/useStoreNavigation';
 import { formatPrice } from '~/lib/api';
 
-import { cn, formatEtaRange } from '~/lib/utils';
+import { cartLineTotal, cn, formatEtaRange } from '~/lib/utils';
 import { buildStaticMap } from '~/lib/staticMap';
 import RouteMap from '~/components/checkout/RouteMap';
 import ShopHeaderMinimal from '~/components/menu/ShopHeaderMinimal';
@@ -18,7 +18,7 @@ import UserDrawer from '~/components/Header/UserDrawer';
 
 import DeliveryAddressModal from '~/components/dialogs/DeliveryAddressModal';
 import PreorderModal from '~/components/menu/PreorderModal';
-import PaymentSheet, { paymentMethodLabel } from '~/components/checkout/PaymentSheet';
+import PaymentSheet, { paymentMethodLabel, paymentMethodSub } from '~/components/checkout/PaymentSheet';
 import VoucherSheet from '~/components/checkout/VoucherSheet';
 import VoucherFlash from '~/components/checkout/VoucherFlash';
 
@@ -64,7 +64,7 @@ export default function CheckoutScreen() {
    * mobile screen. This component is presentation only.
    */
   const {
-    t, storeInfo, cart, totalPrice, discountAmount, appliedVoucher,
+    t, storeInfo, cart, totalPrice, discountAmount, appliedVoucher, voucherHint,
     setOrderType, deliveryAddress, setDeliveryAddress, toMenu,
     isDineIn, isDelivery, isPickup,
     deliveryCharges, deliveryTime, priorityCharge, priorityTime, priorityAvailable,
@@ -81,7 +81,7 @@ export default function CheckoutScreen() {
 
   // Stripe needs an absolute return address, so this screen builds one path by
   // hand — from the same prefix every in-app link uses.
-  const { base } = useStoreNavigation();
+  const { base, withToken } = useStoreNavigation();
 
   const [accountOpen, setAccountOpen] = useState(false);
 
@@ -316,7 +316,9 @@ export default function CheckoutScreen() {
               </span>
               <span className='min-w-0 flex-1'>
                 <span className='block text-[15px] font-bold'>{paymentMethod ? paymentMethodLabel(paymentMethod, t) : (t.choosePaymentMethod ?? 'Choose a payment method')}</span>
-                <span className='mt-0.5 block text-[12.5px] font-medium text-muted-foreground'>{isDelivery ? (t.onDelivery ?? '') : (t.onPickup ?? '')}</span>
+                <span className='mt-0.5 block text-[12.5px] font-medium text-muted-foreground'>
+                  {paymentMethod ? paymentMethodSub(paymentMethod, t, isDelivery, isDineIn) : isDineIn ? t.atTable : isDelivery ? (t.onDelivery ?? '') : (t.onPickup ?? '')}
+                </span>
               </span>
               <ChevronRight className='h-[17px] w-[17px] text-muted-foreground' />
             </button>
@@ -328,7 +330,7 @@ export default function CheckoutScreen() {
               </span>
               <span className='min-w-0 flex-1'>
                 <span className='block text-[15px] font-bold'>{appliedVoucher ? `${t.voucher} ${appliedVoucher.code}` : (t.addVoucher ?? 'Add a voucher')}</span>
-                <span className='mt-0.5 block text-[12.5px] font-medium text-muted-foreground'>{appliedVoucher ? `−${formatPrice(discountAmount)}` : (t.redeemCodeAndSave ?? 'Redeem a code and save')}</span>
+                <span className='mt-0.5 block text-[12.5px] font-medium text-muted-foreground'>{voucherHint ?? (appliedVoucher ? `−${formatPrice(discountAmount)}` : (t.redeemCodeAndSave ?? 'Redeem a code and save'))}</span>
               </span>
               <ChevronRight className='h-[17px] w-[17px] text-muted-foreground' />
             </button>
@@ -369,7 +371,7 @@ export default function CheckoutScreen() {
                 <div key={item.id} className='flex items-center gap-3 border-b border-border py-2.5'>
                   <span className='flex h-7 min-w-7 shrink-0 items-center justify-center rounded-lg bg-surface-3 px-1.5 text-[12.5px] font-extrabold'>{item.quantity}×</span>
                   <span className='min-w-0 flex-1 text-sm font-semibold'>{item.product.name}</span>
-                  <span className='text-sm font-bold'>{formatPrice(item.product.currentPrice * item.quantity)}</span>
+                  <span className='text-sm font-bold'>{formatPrice(cartLineTotal(item))}</span>
                 </div>
               ))}
             </div>
@@ -467,7 +469,7 @@ export default function CheckoutScreen() {
           stripeAccountId={payNow.stripeAccountId}
           amount={payNow.amount}
           method={payNow.method}
-          returnUrl={typeof window !== 'undefined' ? `${window.location.origin}${base}/confirmation?order=${payNow.orderId}` : ''}
+          returnUrl={typeof window !== 'undefined' ? `${window.location.origin}${withToken(`${base}/confirmation`, { order: payNow.orderId })}` : ''}
         />
       )}
 

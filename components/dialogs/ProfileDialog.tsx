@@ -1,6 +1,7 @@
 import React from 'react';
 import DialogWrapper from '../DialogWrapper';
 import { useUser } from '~/contexts/user-context';
+import { useCustomerDetails } from '~/hooks/useCustomerDetails';
 import { cn } from '~/lib/utils';
 import { useLanguage } from '~/contexts/language-context';
 
@@ -16,6 +17,7 @@ function Row({ label, value, className }: { label: string; value?: string | numb
 
 const ProfileDialog = ({ isOpen, handleOpenChange }: { isOpen: boolean; handleOpenChange: (open: boolean) => void }) => {
   const { user, clearUser } = useUser();
+  const details = useCustomerDetails();
   const { t } = useLanguage();
   const logout = () => {
     clearUser();
@@ -28,7 +30,7 @@ const ProfileDialog = ({ isOpen, handleOpenChange }: { isOpen: boolean; handleOp
           <Row label={t.name} value={user?.name} />
           <Row label={t.email} value={user?.email} />
           <Row label={t.phoneNumber} value={user?.phoneNumber} />
-          <Row label={t.points} value={user?.points ?? 0} className='border-none' />
+          <Row label={t.points} value={details?.points ?? user?.points ?? 0} className='border-none' />
         </div>
 
         {/* <h2 className='mt-8 text-lg font-semibold text-gray-900'>Address</h2>

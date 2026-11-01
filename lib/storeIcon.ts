@@ -1,7 +1,8 @@
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import sharp from 'sharp';
 
 import { getStoreData } from './api';
-import { requestOrigin } from './metadata';
 import type { IStoreInfo } from './types';
 
 /*
@@ -100,6 +101,40 @@ async function storeFor(slug: string | null): Promise<IStoreInfo | null> {
   }
 }
 
+/*
+ * Our own mark, read from disk — never fetched over HTTP.
+ *
+ * It used to be fetched from `<request origin>/only_logo.png`, and the origin
+ * comes from the request's Host / X-Forwarded-Host headers: anyone could make
+ * the server download a picture from a host of their choosing and serve it,
+ * cached publicly for a day, as a restaurant's favicon.
+ */
+let fallbackBytes: Promise<Buffer | null> | null = null;
+function fallbackLogo(): Promise<Buffer | null> {
+  if (!fallbackBytes) {
+    fallbackBytes = readFile(path.join(process.cwd(), 'public', 'only_logo.png')).catch(() => {
+      fallbackBytes = null;
+      return null;
+    });
+  }
+  return fallbackBytes;
+}
+
+async function fallbackIcon(size: number): Promise<Buffer | null> {
+  const key = `${size}|fallback`;
+  const hit = rendered.get(key);
+  if (hit) return hit;
+  const bytes = await fallbackLogo();
+  if (!bytes) return null;
+  try {
+    const png = await drawSquare(bytes, size);
+    rendered.set(key, png);
+    return png;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * The PNG for one icon request: the store's logo, or our own mark when the
  * store has none, it cannot be loaded, or there is no store (`slug` null).
@@ -108,7 +143,7 @@ export async function iconResponse(slug: string | null, size: number): Promise<R
   const store = await storeFor(slug);
   const logo = storeLogoURL(store);
   let png = logo ? await iconFor(logo, size) : null;
-  if (!png) png = await iconFor(`${await requestOrigin()}/only_logo.png`, size);
+  if (!png) png = await fallbackIcon(size);
   if (!png) return new Response('Icon not available', { status: 404 });
   return new Response(new Uint8Array(png), {
     headers: { 'Content-Type': 'image/png', 'Cache-Control': CACHE_CONTROL },

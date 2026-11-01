@@ -24,6 +24,10 @@ export interface Translations {
   storeClosedNow: string;
   storeClosedCannotOrder: string;
   preorderSlotClosed: string;
+  /** The pre-order time passed before the order was sent; it is now for as soon as possible. */
+  preorderSlotPassed: string;
+  /** Checkout button while the pre-order time is outside the opening hours. */
+  chooseAnotherTime: string;
   total: string;
   totalIncludingVAT: string;
   proceedToCheckout: string;
@@ -247,6 +251,11 @@ export interface Translations {
   /** Polling gave up: paid, but no order on our side. Needs a human. */
   orderNotConfirmed: string;
   orderNotConfirmedSub: string;
+  /** shop-money 01.11.2026: an order reference that could not be loaded (no payment involved). */
+  orderLookupFailed: string;
+  orderLookupFailedSub: string;
+  /** Where cash / the card reader is paid when ordering at a table. */
+  atTable: string;
   callTheRestaurant: string;
   /** The link names no order, or one we cannot find. */
   /** A refund was issued; a full one also cancels the order. */
@@ -421,6 +430,8 @@ export const translations: Record<Language, Translations> = {
     storeClosedNow: 'Currently closed',
     storeClosedCannotOrder: 'The restaurant is closed right now, so no orders can be placed.',
     preorderSlotClosed: 'The chosen pre-order time is outside the opening hours. Please pick another one.',
+    preorderSlotPassed: 'Your chosen time has passed, so your order is now for as soon as possible. Please check and order again.',
+    chooseAnotherTime: 'Choose another time',
     total: 'Total',
     totalIncludingVAT: 'Total (Including VAT)',
     proceedToCheckout: 'Proceed to Checkout',
@@ -637,6 +648,9 @@ export const translations: Record<Language, Translations> = {
     confirmingPaymentSub: 'This usually takes a few seconds. Please keep this page open.',
     orderNotConfirmed: 'We could not confirm your order',
     orderNotConfirmedSub: 'Your payment may have gone through, but we have not been able to confirm the order. Please contact the restaurant with the reference below before ordering again.',
+    orderLookupFailed: 'Order not found',
+    orderLookupFailedSub: 'We could not load an order with this number. If you have questions about it, please contact the restaurant with the number below.',
+    atTable: 'At the table',
     callTheRestaurant: 'Call the restaurant',
     orderRefunded: 'This order was refunded',
     orderRefundedSub: 'The restaurant has refunded this order. Depending on your bank it can take a few days to appear.',
@@ -787,6 +801,8 @@ export const translations: Record<Language, Translations> = {
     storeClosedNow: 'Zurzeit geschlossen',
     storeClosedCannotOrder: 'Das Restaurant hat gerade geschlossen, daher sind keine Bestellungen möglich.',
     preorderSlotClosed: 'Die gewählte Vorbestellzeit liegt außerhalb der Öffnungszeiten. Bitte wähle eine andere.',
+    preorderSlotPassed: 'Deine gewählte Zeit ist vorbei, deshalb gilt deine Bestellung jetzt für so schnell wie möglich. Bitte prüfe sie und bestelle noch einmal.',
+    chooseAnotherTime: 'Andere Zeit wählen',
     location: 'Standort',
     delivery: 'Lieferung',
     pickup: 'Abholung',
@@ -1023,6 +1039,9 @@ export const translations: Record<Language, Translations> = {
     confirmingPaymentSub: 'Das dauert normalerweise nur wenige Sekunden. Bitte lass diese Seite geöffnet.',
     orderNotConfirmed: 'Wir konnten deine Bestellung nicht bestätigen',
     orderNotConfirmedSub: 'Deine Zahlung wurde möglicherweise ausgeführt, aber wir konnten die Bestellung nicht bestätigen. Bitte kontaktiere das Restaurant mit der unten stehenden Referenz, bevor du erneut bestellst.',
+    orderLookupFailed: 'Bestellung nicht gefunden',
+    orderLookupFailedSub: 'Zu dieser Nummer konnten wir keine Bestellung laden. Wenn du Fragen dazu hast, melde dich bitte mit der Nummer unten beim Restaurant.',
+    atTable: 'Am Tisch',
     callTheRestaurant: 'Restaurant anrufen',
     orderRefunded: 'Diese Bestellung wurde erstattet',
     orderRefundedSub: 'Das Restaurant hat diese Bestellung erstattet. Je nach Bank kann es einige Tage dauern, bis der Betrag erscheint.',

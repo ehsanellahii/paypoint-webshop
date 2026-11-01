@@ -14,8 +14,30 @@ import { appleProvider, auth, googleProvider } from '~/lib/firebase';
 import { RecaptchaVerifier, signInWithPhoneNumber, signInWithPopup, type ConfirmationResult } from 'firebase/auth';
 import { loginOrRegisterUser, loginUserWithProvider, registerUser, syncFavorites } from '~/lib/api';
 import { useStore } from '~/contexts/store-context';
-import { useUser } from '~/contexts/user-context';
+import { useUser, type StoredUser } from '~/contexts/user-context';
 import { getFavoriteIds, setFavoritesFromIds } from '~/lib/favorites';
+import { apiErrorText } from '~/lib/errorMessages';
+
+/*
+ * Firebase's own refusals, in the shop's language. Firebase writes its
+ * messages in English for developers; the customer gets a sentence, and the
+ * code stays appended for whoever has to debug a report.
+ */
+const FIREBASE_TEXTS: Record<string, { de: string; en: string }> = {
+  invalidPhone: { de: 'Diese Telefonnummer sieht nicht richtig aus.', en: 'That phone number does not look right.' },
+  tooMany: { de: 'Zu viele Versuche. Bitte warte ein paar Minuten und versuche es dann erneut.', en: 'Too many attempts. Please wait a few minutes and try again.' },
+  smsUnavailable: { de: 'SMS können gerade nicht verschickt werden. Bitte versuche es später noch einmal.', en: 'SMS sending is currently unavailable. Please try again later.' },
+  smsRegion: { de: 'SMS in dieses Land sind noch nicht freigeschaltet. Bitte nutze eine andere Nummer oder melde dich beim Restaurant.', en: 'SMS to this country is not enabled yet. Please try another number or contact us.' },
+  providerOff: { de: 'Diese Anmeldeart ist für diese Seite nicht aktiviert.', en: 'This sign-in method is not enabled for this site.' },
+  domain: { de: 'Diese Seite ist für die Anmeldung nicht freigegeben.', en: 'This domain is not authorised for sign-in.' },
+  captcha: { de: 'Die Prüfung ist fehlgeschlagen. Bitte versuche es noch einmal.', en: 'Verification failed. Please try again.' },
+  otherProvider: { de: 'Diese E-Mail ist schon mit einer anderen Anmeldeart verknüpft. Bitte nutze die, mit der du dich registriert hast.', en: 'This email is already linked to a different sign-in method. Please use the one you signed up with.' },
+  popup: { de: 'Dein Browser hat das Anmeldefenster blockiert. Bitte erlaube Pop-ups und versuche es erneut.', en: 'Your browser blocked the sign-in window. Please allow pop-ups and try again.' },
+  sendFailed: { de: 'Der Code konnte nicht gesendet werden. Bitte versuche es noch einmal.', en: 'Failed to send the code. Please try again.' },
+  socialFailed: { de: 'Die Anmeldung hat nicht geklappt. Bitte versuche es noch einmal.', en: 'Sign-in did not work. Please try again.' },
+  wrongCode: { de: 'Der Code ist falsch. Bitte versuche es noch einmal.', en: 'Invalid code. Please try again.' },
+  codeExpired: { de: 'Der Code ist abgelaufen. Bitte fordere einen neuen an.', en: 'The code has expired. Please request a new one.' },
+};
 
 /**
  * Turn a Firebase auth error into something a customer can act on.
@@ -44,19 +66,19 @@ function withCode(message: string, code?: string) {
 
 function describeAuthError(
   e: { code?: string; message?: string },
-  t: Partial<Record<'invalidPhone' | 'otpSendFailed', string>>,
+  language: string,
   provider: 'phone' | 'google' | 'apple' = 'phone',
 ) {
-  const providerName = provider === 'phone' ? 'Phone' : provider === 'google' ? 'Google' : 'Apple';
+  const say = (key: keyof typeof FIREBASE_TEXTS) => FIREBASE_TEXTS[key][language === 'en' ? 'en' : 'de'];
 
   switch (e?.code) {
     case 'auth/invalid-phone-number':
-      return withCode(t?.invalidPhone ?? 'That phone number does not look right.', e?.code);
+      return withCode(say('invalidPhone'), e?.code);
     case 'auth/too-many-requests':
-      return withCode('Too many attempts. Please wait a few minutes and try again.', e?.code);
+      return withCode(say('tooMany'), e?.code);
     case 'auth/quota-exceeded':
     case 'auth/billing-not-enabled':
-      return withCode('SMS sending is currently unavailable. Please try again later.', e?.code);
+      return withCode(say('smsUnavailable'), e?.code);
     /*
      * Firebase returns this one code for two unrelated causes: the provider is
      * switched off, or the SMS region policy does not allow the number's
@@ -66,27 +88,39 @@ function describeAuthError(
      */
     case 'auth/operation-not-allowed':
       if (/region/i.test(e?.message ?? '')) {
-        return withCode('SMS to this country is not enabled yet. Please try another number or contact us.', e?.code);
+        return withCode(say('smsRegion'), e?.code);
       }
-      return withCode(`${providerName} sign-in is not enabled for this site.`, e?.code);
+      return withCode(say('providerOff'), e?.code);
     case 'auth/unauthorized-domain':
-      return withCode('This domain is not authorised for sign-in.', e?.code);
+      return withCode(say('domain'), e?.code);
     case 'auth/captcha-check-failed':
-      return withCode('Verification failed. Please try again.', e?.code);
+      return withCode(say('captcha'), e?.code);
     /*
      * The same address already signed in through another provider. Firebase
      * refuses to guess which identity is meant, and the customer cannot tell
      * from the raw code what to do about it.
      */
     case 'auth/account-exists-with-different-credential':
-      return withCode('This email is already linked to a different sign-in method. Please use the one you signed up with.', e?.code);
+      return withCode(say('otherProvider'), e?.code);
     case 'auth/popup-blocked':
-      return withCode('Your browser blocked the sign-in window. Please allow pop-ups and try again.', e?.code);
+      return withCode(say('popup'), e?.code);
     default:
-      if (provider !== 'phone') return withCode(e?.message || `${providerName} sign-in failed. Please try again.`, e?.code);
-      return withCode(e?.message || t?.otpSendFailed || 'Failed to send OTP. Please try again.', e?.code);
+      // Never Firebase's or the server's English message — the code is enough for debugging.
+      return withCode(say(provider === 'phone' ? 'sendFailed' : 'socialFailed'), e?.code);
   }
 }
+
+/**
+ * A refusal from our own server during sign-in (0051 codes such as
+ * AUTH_TOKEN_INVALID or AUTH_PHONE_MISMATCH), in the shop's language.
+ */
+function describeBackendError(e: any, language: string) {
+  const code = e?.code ?? e?.errorCode;
+  return apiErrorText(typeof code === 'string' && !code.startsWith('auth/') ? code : undefined, language, 'auth');
+}
+
+/** Errors thrown by our API carry an HTTP status; Firebase's carry an `auth/…` code. */
+const isBackendError = (e: any) => typeof e?.status === 'number';
 
 
 type Step = 'details' | 'otp';
@@ -122,7 +156,7 @@ export function useAuthFlow({
   /** Validate the number alone: no name field is on screen to fill in. */
   phoneOnly?: boolean;
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const storeInfo = useStore();
   const { setUser } = useUser();
   const adminId = storeInfo?.adminId || '';
@@ -244,8 +278,8 @@ export function useAuthFlow({
     } catch (e: any) {
       // common firebase errors: auth/invalid-phone-number, auth/too-many-requests,
       // auth/unauthorized-domain, auth/billing-not-enabled, auth/operation-not-allowed.
-      console.error('[auth] signInWithPhoneNumber failed', e?.code, e?.message, e);
-      setSendError(describeAuthError(e, t));
+      console.error('[auth] signInWithPhoneNumber failed', e?.code);
+      setSendError(describeAuthError(e, language));
     } finally {
       // Whether it worked or not — see `clearRecaptcha`.
       clearRecaptcha();
@@ -270,40 +304,35 @@ export function useAuthFlow({
       setDisabled(true);
       setOtpError(undefined);
 
-      await confirmationResult.confirm(parsed.data.otp);
+      const cred = await confirmationResult.confirm(parsed.data.otp);
 
-      // ✅ Firebase token (send to your backend if you want to create/update user)
-      // const idToken = await cred.user.getIdToken();
+      /*
+       * The proof the server needs (0051): Firebase's ID token for the number
+       * the SMS just verified. The number sent alongside is the one Firebase
+       * verified, in its own E.164 form, so the two always match.
+       */
+      const idToken = await cred.user.getIdToken();
+      const verifiedPhone = cred.user.phoneNumber || normalizedPhone;
       let user = null;
       if (isRegistration) {
-        user = await registerUser(adminId, storeId, apiKey, (formData as RegistrationFormValues).customerName.trim(), normalizedPhone);
+        user = await registerUser(adminId, storeId, apiKey, (formData as RegistrationFormValues).customerName.trim(), verifiedPhone, idToken);
       } else {
         // Signing in and registering are the same errand here: the OTP just
         // proved the number, so an unknown one means a first-time customer.
-        user = await loginOrRegisterUser(adminId, storeId, apiKey, normalizedPhone, formData.customerName?.trim());
+        user = await loginOrRegisterUser(adminId, storeId, apiKey, verifiedPhone, formData.customerName?.trim(), idToken);
       }
-      handleOpenChange(false);
-      if (user) setUser(user);
-      try {
-        const slug = storeInfo?.slug; // IMPORTANT: use same key you store favorites under
-        const localIds = getFavoriteIds(slug!);
-
-        const res = await syncFavorites(adminId, storeId, apiKey, user._id, localIds);
-
-        const finalIds: string[] = res?.productIds ?? [];
-        setFavoritesFromIds(slug!, finalIds);
-      } catch (e) {
-        console.error('Favorites sync after auth failed:', e);
-      }
+      await finishLogin(user);
     } catch (e: any) {
       const code = e?.code as string | undefined;
 
-      if (code === 'auth/invalid-verification-code') {
-        setOtpError(withCode(t?.invalidOtp ?? 'Invalid OTP. Please try again.', code));
+      if (isBackendError(e)) {
+        setOtpError(describeBackendError(e, language));
+      } else if (code === 'auth/invalid-verification-code') {
+        setOtpError(withCode(FIREBASE_TEXTS.wrongCode[language === 'en' ? 'en' : 'de'], code));
       } else if (code === 'auth/code-expired') {
-        setOtpError(withCode(t?.otpExpired ?? 'OTP expired. Please resend.', code));
+        setOtpError(withCode(FIREBASE_TEXTS.codeExpired[language === 'en' ? 'en' : 'de'], code));
       } else {
-        setOtpError(withCode(e?.message || t?.otpVerifyFailed || 'Failed to verify OTP.', code));
+        setOtpError(withCode(apiErrorText(undefined, language, 'auth'), code));
       }
     } finally {
       setDisabled(false);
@@ -320,16 +349,21 @@ export function useAuthFlow({
    * customer and fold the guest's local favourites into their account. Shared
    * so the social paths cannot drift from the phone path.
    */
-  const finishLogin = async (user: any) => {
+  const finishLogin = async (raw: any) => {
+    /*
+     * Only a customer object with its token becomes a session — and only the
+     * whitelisted fields of it (see `sanitizeUser`).
+     */
+    const session: StoredUser | null = setUser(raw);
+    if (!session) throw Object.assign(new Error('AUTH_TOKEN_INVALID'), { status: 401, code: 'AUTH_TOKEN_INVALID' });
     handleOpenChange(false);
-    if (user) setUser(user);
     try {
-      const slug = storeInfo?.slug;
-      const localIds = getFavoriteIds(slug!);
-      const res = await syncFavorites(adminId, storeId, apiKey, user._id, localIds);
-      setFavoritesFromIds(slug!, res?.productIds ?? []);
-    } catch (e) {
-      console.error('Favorites sync after auth failed:', e);
+      const slug = storeInfo?.slug || '';
+      const localIds = getFavoriteIds(slug);
+      const res = await syncFavorites(adminId, storeId, apiKey, session._id, localIds, session.authToken);
+      setFavoritesFromIds(slug, res?.productIds ?? []);
+    } catch {
+      // Favourites stay local; signing in does not fail over them.
     }
   };
 
@@ -355,17 +389,20 @@ export function useAuthFlow({
         return;
       }
 
+      // The server checks this token's verified e-mail against `email` (0051).
+      const idToken = await credential.user.getIdToken();
       const user = await loginUserWithProvider(adminId, storeId, apiKey, {
         email,
         name: credential.user.displayName ?? undefined,
         provider: providerName,
+        idToken,
       });
       await finishLogin(user);
     } catch (e: any) {
       // Closing the popup is a choice, not a fault — say nothing.
       if (e?.code === 'auth/popup-closed-by-user' || e?.code === 'auth/cancelled-popup-request') return;
-      console.error('[auth] social sign-in failed', e?.code, e);
-      setSendError(describeAuthError(e, t, providerName));
+      console.error('[auth] social sign-in failed', e?.code);
+      setSendError(isBackendError(e) ? describeBackendError(e, language) : describeAuthError(e, language, providerName));
     } finally {
       setDisabled(false);
     }

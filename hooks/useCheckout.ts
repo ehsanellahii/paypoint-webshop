@@ -1,29 +1,44 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import moment from 'moment-timezone';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useCart } from '~/contexts/cart-context';
 import { useAddress } from '~/contexts/address-context';
 import { useStore } from '~/contexts/store-context';
-import { useUser } from '~/contexts/user-context';
+import { checkoutFormStorageKey, contactStorageKey, useUser } from '~/contexts/user-context';
 import { useLanguage } from '~/contexts/language-context';
 import { useStoreNavigation } from '~/hooks/useStoreNavigation';
+import { useVoucherRequote } from '~/hooks/useVoucherRequote';
 
 import { API_BASE_URL, apiHeaders, createPaymentIntent, createUnconfirmedOrder, CUSTOMER_NAME_PLACEHOLDER, formatPrice } from '~/lib/api';
-import { formatCartItemsForOrder, getImageURL, getPostalRateInfo, storage } from '~/lib/utils';
+import { formatCartItemsForOrder, getImageURL, storage, withoutBlankFields } from '~/lib/utils';
 import type { PreorderSlot } from '~/components/menu/PreorderModal';
 import { ORDER_PAYMENT_METHOD, type PaymentMethod } from '~/components/checkout/PaymentSheet';
 import { savePlacedOrder } from '~/lib/lastOrder';
-import { clearPreorderSlot, getPreorderSlot, savePreorderSlot } from '~/lib/preorderSlot';
-import { isRestaurantOpen, isSlotWithinOpeningHours } from '~/lib/restaurantTimings';
+import { checkPreorderSlot, clearPreorderSlot, formatSlotLabel, savePreorderSlot, slotInstant } from '~/lib/preorderSlot';
+import { isRestaurantOpen } from '~/lib/restaurantTimings';
+import { berlinHHMM } from '~/lib/berlinTime';
 import { useOrderingWindow } from '~/hooks/useOrderingWindow';
-import { getTranslatedOrderApiErrorMessage } from '~/lib/errorMessages';
+import { apiErrorText, orderErrorText, voucherMinimumText } from '~/lib/errorMessages';
+import { ApiError, fetchMenuData, getAllProducts } from '~/lib/api';
+import { cartLineTotal } from '~/lib/utils';
+import { isPaymentMethodOffered } from '~/components/checkout/PaymentSheet';
+import { clearOrderAttempt, orderAttemptKey } from '~/lib/orderAttempt';
+import { isTypablePhone, normalizeTypedPhone } from '~/lib/phone';
 
 
 const TZ = 'Europe/Berlin';
-const STORAGE_KEY = 'persisted';
 export const TIP_VALUES = [0, 1, 2, 3];
+
+/** What the checkout form keeps across a detour (mobile "Gutscheine", a reload). */
+type SavedCheckoutForm = {
+  bellName?: string;
+  driverNote?: string;
+  paymentMethod?: PaymentMethod | null;
+  tip?: number;
+  timing?: 'standard' | 'priority';
+};
+
 
 /**
  * Everything the checkout does that is not layout: form state, validation,
@@ -62,20 +77,34 @@ const firstRealName = (...candidates: (string | null | undefined)[]) => {
 const ONLINE_METHODS = new Set<PaymentMethod>(['cardWallets', 'applePay', 'googlePay', 'paypal', 'klarna']);
 
 export function useCheckout() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const storeInfo = useStore();
-  const { user, setUser } = useUser();
+  const { user, clearUser } = useUser();
   const { cart, totalPrice, totalItems, discountAmount, appliedVoucher, clearCart, orderMessage } = useCart();
-  const { orderType, setOrderType, deliveryAddress, setDeliveryAddress, savedAddresses } = useAddress();
+  const { orderType, setOrderType, deliveryAddress, setDeliveryAddress, savedAddresses, deliveryRate } = useAddress();
   const { slug, toMenu, toConfirmation } = useStoreNavigation();
-  // Also supplies the tick that keeps the answer current while the page sits open.
-  const { storeClosed } = useOrderingWindow();
+  /*
+   * Also supplies the tick that keeps the answer current while the page sits
+   * open, and the pre-order slot: one copy of it, which drops a slot that has
+   * passed (the order then becomes "as soon as possible").
+   */
+  const { storeClosed, slot: windowSlot, slotOutsideHours: windowSlotOutsideHours } = useOrderingWindow();
 
   const isDineIn = !!storeInfo?.tableInfo?.token;
   const isDelivery = !isDineIn && orderType === 'delivery';
   const isPickup = !isDineIn && orderType === 'pickup';
+  /** The order type the server prices this order with. */
+  const pricingOrderType = isDineIn ? 'dineIn' : orderType;
+  const { voucherBelowMinimum, voucherNotice, isHydrated: cartHydrated, reconcile } = useCart();
 
-  const rate = getPostalRateInfo(Number(deliveryAddress?.postalCode || 0), storeInfo?.postalRates || []);
+  /*
+   * The delivery terms for this address are the server's answer, held by the
+   * address context — the same one the zone gate and the address dialog got.
+   * Recomputing them here from the page's rate table used to refuse
+   * addresses the gate had just accepted (a store without zones, a postcode
+   * stored as a string).
+   */
+  const rate = deliveryRate;
   const deliveryCharges = isDelivery ? (rate.deliveryCharges ?? 0) : 0;
   const deliveryTime = rate.deliveryTime || 0;
   const minimumOrderAmount = rate.minimumOrderAmount || 0;
@@ -89,10 +118,30 @@ export function useCheckout() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [bellName, setBellName] = useState('');
   const [driverNote, setDriverNote] = useState('');
-  // Single mutually-exclusive timing choice, mirroring the prototype:
-  // standard | priority (delivery only, if the store defines a charge) | scheduled.
-  const [timing, setTiming] = useState<'standard' | 'priority' | 'scheduled'>('standard');
-  const [scheduledSlot, setScheduledSlot] = useState<PreorderSlot | null>(null);
+  /*
+   * Single mutually-exclusive timing choice, mirroring the prototype:
+   * standard | priority (delivery only, if the store defines a charge) | scheduled.
+   *
+   * "scheduled" is not state of its own: it is "a pre-order slot is stored",
+   * read from the one copy `useOrderingWindow` keeps. So when that hook drops
+   * a slot that has passed, the choice falls back to the speed below by itself.
+   */
+  const [speed, setSpeed] = useState<'standard' | 'priority'>('standard');
+  const storedSlot = windowSlot;
+  /*
+   * The label is rebuilt from the slot's date rather than trusted: "Heute"
+   * written before midnight is "Gestern" after it.
+   */
+  const scheduledSlot = useMemo<PreorderSlot | null>(
+    () => (storedSlot ? { ...storedSlot, label: formatSlotLabel(storedSlot, { today: t.today, tomorrow: t.tomorrow }, language) } : null),
+    [storedSlot, t, language],
+  );
+  /*
+   * Priority only counts while this address offers it. A choice restored
+   * from an earlier visit (or made for another address) used to go out as
+   * `deliverySpeed: 'priority'` with a fee of 0.
+   */
+  const timing: 'standard' | 'priority' | 'scheduled' = scheduledSlot ? 'scheduled' : speed === 'priority' && priorityAvailable ? 'priority' : 'standard';
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
   const [tip, setTip] = useState(0);
 
@@ -103,6 +152,21 @@ export function useCheckout() {
 
   /** Set once the prefill below has run, so the save effect cannot beat it. */
   const restored = useRef(false);
+  /** Same, for the rest of the form (sessionStorage). */
+  const formRestored = useRef(false);
+  /*
+   * The save effect runs in the same commit as the restore, still holding the
+   * empty first-render values; writing them would wipe what is about to be
+   * restored (and a re-run of the restore — React does that in development —
+   * would then read the wiped copy). So that one run is skipped.
+   */
+  const skipFormSave = useRef(false);
+  /*
+   * One Idempotency-Key per order attempt, kept in session storage per store
+   * (`lib/orderAttempt.ts`): a retry of the same attempt — a timeout, a double
+   * tap, a reload after either — sends the same key, so the server answers
+   * with the first order instead of creating a second.
+   */
 
   const [touched, setTouched] = useState(false);
   const [placing, setPlacing] = useState(false);
@@ -119,19 +183,68 @@ export function useCheckout() {
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Prefill from the last order, and pick up a pre-order slot chosen on the menu.
+  /*
+   * The rest of the form, per store and per tab.
+   *
+   * On mobile "Gutscheine" is its own screen; going there and back unmounted
+   * the checkout and threw away the payment method, tip, bell name, driver
+   * note and the priority choice. Session storage, not local: these belong to
+   * the order being put together, not to the customer.
+   */
   useEffect(() => {
-    const saved = storage.get<{ customerName?: string; email?: string; phoneNumber?: string }>(STORAGE_KEY, {});
+    let saved: SavedCheckoutForm = {};
+    try {
+      saved = JSON.parse(sessionStorage.getItem(checkoutFormStorageKey(slug)) || '{}') as SavedCheckoutForm;
+    } catch {
+      saved = {};
+    }
+    if (typeof saved.bellName === 'string') setBellName(saved.bellName);
+    if (typeof saved.driverNote === 'string') setDriverNote(saved.driverNote);
+    if (saved.paymentMethod && isPaymentMethodOffered(saved.paymentMethod, storeInfo)) setPaymentMethod(saved.paymentMethod);
+    if (typeof saved.tip === 'number' && TIP_VALUES.includes(saved.tip)) setTip(saved.tip);
+    if (saved.timing === 'priority') setSpeed('priority');
+    formRestored.current = true;
+    skipFormSave.current = true;
+    // Restored once per store; the store's settings do not change under an open page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
+
+  useEffect(() => {
+    if (!formRestored.current) return;
+    if (skipFormSave.current) {
+      skipFormSave.current = false;
+      return;
+    }
+    const form: SavedCheckoutForm = { bellName, driverNote, paymentMethod, tip, timing: speed };
+    try {
+      sessionStorage.setItem(checkoutFormStorageKey(slug), JSON.stringify(form));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [slug, bellName, driverNote, paymentMethod, tip, speed]);
+
+  /*
+   * A priority choice this address does not offer is put back to standard
+   * once the address's terms are known (not while they are still being asked
+   * for, or a restored choice would be thrown away before the answer).
+   */
+  const rateSettled = isDelivery && !!deliveryAddress && !rate.pending && rate.source !== 'none';
+  useEffect(() => {
+    if (speed === 'priority' && rateSettled && !priorityAvailable) setSpeed('standard');
+  }, [speed, rateSettled, priorityAvailable]);
+
+  // Prefill from the last order. A pre-order slot chosen on the menu comes from `useOrderingWindow`.
+  useEffect(() => {
+    /*
+     * Per store: the old `persisted` key was shared by every restaurant on the
+     * domain, so one shop prefilled another's checkout with the last
+     * customer's name, e-mail and phone. Logging out clears it.
+     */
+    const saved = storage.get<{ customerName?: string; email?: string; phoneNumber?: string }>(contactStorageKey(slug), {});
     if (saved.customerName) setCustomerName(saved.customerName);
     if (saved.email) setEmail(saved.email);
     if (saved.phoneNumber) setPhoneNumber(saved.phoneNumber);
     restored.current = true;
-
-    const menuSlot = getPreorderSlot(slug);
-    if (menuSlot) {
-      setScheduledSlot(menuSlot);
-      setTiming('scheduled');
-    }
   }, [slug]);
 
   /*
@@ -146,22 +259,64 @@ export function useCheckout() {
   useEffect(() => {
     if (!restored.current) return;
     if (!customerName.trim() && !email.trim() && !phoneNumber.trim()) return;
-    storage.set(STORAGE_KEY, { customerName: customerName.trim(), email: email.trim(), phoneNumber: phoneNumber.trim() });
-  }, [customerName, email, phoneNumber]);
+    storage.set(contactStorageKey(slug), { customerName: customerName.trim(), email: email.trim(), phoneNumber: phoneNumber.trim() });
+  }, [slug, customerName, email, phoneNumber]);
 
-  // An empty cart has nothing to check out.
+  /*
+   * An empty cart has nothing to check out — but only once the stored cart has
+   * been read. Before that the cart is always empty, and a reload of the
+   * checkout bounced every customer back to the menu.
+   */
   useEffect(() => {
-    if (cart.length === 0 && !placing) toMenu();
-  }, [cart.length, placing, toMenu]);
+    if (cartHydrated && cart.length === 0 && !placing) toMenu();
+  }, [cartHydrated, cart.length, placing, toMenu]);
+
+  /*
+   * The basket priced for the order type it will be placed as. The menu the
+   * customer shopped from may have been the pickup one, and a switch to
+   * delivery here (or a cart kept for days) changes prices — so the cart is
+   * checked against the menu for this order type whenever it changes.
+   */
+  useEffect(() => {
+    if (!cartHydrated || !storeInfo?.adminId || !storeInfo?.storeId) return;
+    let cancelled = false;
+    fetchMenuData(storeInfo.adminId, storeInfo.storeId, storeInfo.apiKey, pricingOrderType)
+      .then((menu) => {
+        if (!cancelled && menu?.data) reconcile(getAllProducts(menu));
+      })
+      .catch(() => {
+        /* the order route reprices anyway; the cart stays as it is */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cartHydrated, storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey, pricingOrderType, reconcile]);
+
+  // The voucher re-checked by the server whenever the basket, order type or customer changes.
+  useVoucherRequote(pricingOrderType);
 
   const isScheduled = timing === 'scheduled' && !!scheduledSlot;
-  const priorityFee = priorityAvailable && timing === 'priority' ? priorityCharge : 0;
-  const subtotalAfterDiscount = totalPrice - discountAmount;
+  const priorityFee = timing === 'priority' ? priorityCharge : 0;
+  // `discountAmount` follows the basket and never exceeds it — see cart-context.
+  const subtotalAfterDiscount = Math.max(0, totalPrice - discountAmount);
+  /** A voucher is held and actually takes something off this basket. */
+  const voucherApplies = !!appliedVoucher && !voucherBelowMinimum && discountAmount > 0;
+  /**
+   * Why the voucher is not counting, for the line under the voucher row: the
+   * basket is below its minimum, or the server took it off (expired, used up).
+   */
+  const voucherHint: string | null =
+    appliedVoucher && voucherBelowMinimum
+      ? voucherMinimumText(appliedVoucher.minimumOrderValue, language, formatPrice)
+      : !appliedVoucher && voucherNotice
+        ? apiErrorText(voucherNotice, language, 'voucher')
+        : null;
   const grandTotal = subtotalAfterDiscount + deliveryCharges + priorityFee + tip;
 
   // ---- validation (inline, no alerts) ------------------------------------
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  const phoneValid = /^[\d\s+\-()]{6,}$/.test(phoneNumber);
+  // Judged on the number as it will be sent: separators people type are fine.
+  const phoneValid = isTypablePhone(phoneNumber);
 
   const missing: string[] = [];
   /*
@@ -192,6 +347,12 @@ export function useCheckout() {
 
   const belowMinimum = isDelivery && minimumOrderAmount > 0 && totalPrice < minimumOrderAmount;
   const deliveryUnavailable = isDelivery && !!deliveryAddress && !rate.isAvailable;
+  /*
+   * Still asking the server about this address. The fee and the minimum on
+   * screen are the rate table's meanwhile, so the order waits for the answer
+   * rather than going out on figures that may change.
+   */
+  const deliveryZonePending = isDelivery && !!deliveryAddress && rate.pending;
 
   /*
    * Opening hours.
@@ -203,28 +364,38 @@ export function useCheckout() {
    * sent at all, and lets the button say why.
    *
    * A pre-order is the exception: it is for a slot, not for now, so it only has
-   * to fall inside that day's window. The slot lives in session storage and can
-   * outlive the hours it was picked under, so it is re-checked rather than
-   * trusted.
+   * to fall inside the opening hours of its date — and still be at least five
+   * minutes away, the server's own line. The slot lives in session storage and
+   * can outlive the hours it was picked under, or simply pass, so it is
+   * re-checked on every render (`useOrderingWindow` ticks) rather than trusted.
+   * A slot that has passed is dropped there, and the order is then for "as
+   * soon as possible" — shown in the timing choice before anything is placed.
+   *
+   * Closed means: the store is closed now and there is no valid future slot.
+   * A future slot outside the hours (they changed since it was picked) is not
+   * "closed" — the guest picks another time.
    */
-  const slotOutsideHours =
-    isScheduled && !!scheduledSlot && !isSlotWithinOpeningHours(storeInfo?.timings, scheduledSlot.dayOffset, scheduledSlot.time);
-  const orderingClosed = slotOutsideHours || (storeClosed && !isScheduled);
+  const slotOutsideHours = isScheduled && windowSlotOutsideHours;
+  const orderingClosed = storeClosed && !(isScheduled && !slotOutsideHours);
 
-  const canPlace = missing.length === 0 && !belowMinimum && !deliveryUnavailable && !orderingClosed && cart.length > 0;
+  const canPlace =
+    missing.length === 0 && !belowMinimum && !deliveryUnavailable && !deliveryZonePending && !orderingClosed && !slotOutsideHours && cart.length > 0;
 
-  const placeLabel = (() => {
+  /** The button's words without the price — for a layout that shows the price beside them. */
+  const placeLabelShort = (() => {
+    if (slotOutsideHours) return t.chooseAnotherTime ?? 'Choose another time';
     if (orderingClosed) return t.storeClosedNow ?? t.closed ?? 'Closed';
     if (deliveryUnavailable) return t.weAreNotAvailableInYourArea;
     if (belowMinimum) return `${t.minimumOrderAmountIs} ${formatPrice(minimumOrderAmount)}`;
     if (missing.length === 1) return `${missing[0]} ${t.required ?? ''}`.trim();
     if (missing.length > 1) return `${t.stillMissing ?? 'Still missing'}: ${missing.length}`;
-    return `${t.placeOrder ?? 'Place order'} · ${formatPrice(grandTotal)}`;
+    return t.placeOrder ?? 'Place order';
   })();
+  const placeLabel = canPlace ? `${placeLabelShort} · ${formatPrice(grandTotal)}` : placeLabelShort;
 
   const placeHint = (() => {
     if (slotOutsideHours) return t.preorderSlotClosed ?? '';
-    if (storeClosed && !isScheduled) return t.storeClosedCannotOrder ?? '';
+    if (orderingClosed) return t.storeClosedCannotOrder ?? '';
     if (deliveryUnavailable) return t.weAreNotAvailableInYourArea;
     if (belowMinimum) return `${t.minimumOrderAmountIs} ${formatPrice(minimumOrderAmount)}`;
     /*
@@ -237,14 +408,21 @@ export function useCheckout() {
   })();
 
   // ---- submit ------------------------------------------------------------
-  const loginCustomer = async () => {
+  /**
+   * Who the order is from: the customer id for the order, and the customer's
+   * own token when signed in (sent with the order, so a voucher bound to the
+   * customer is accepted — VOUCHER_LOGIN_REQUIRED otherwise).
+   */
+  const loginCustomer = async (): Promise<{ _id: string; authToken?: string } | null> => {
     /*
      * Dine-in collects nothing, and the server's login refuses a customer with
      * no phone number ("Phone number is required"). A table order does not need
-     * one — `customerId` is optional on the order — so skip it entirely rather
-     * than inventing an identity.
+     * one — `customerId` is optional on the order — so `/login` is skipped
+     * rather than inventing an identity. A guest who is signed in still orders
+     * as themselves: their id and token go with the table order. A guest who
+     * is not orders with no customer at all, as before.
      */
-    if (isDineIn) return null;
+    if (isDineIn) return user?._id && user?.authToken ? { _id: String(user._id), authToken: user.authToken } : null;
 
     /*
      * Identity for the lookup, which is not the same thing as the contact
@@ -263,9 +441,9 @@ export function useCheckout() {
      * was verified under. The typed number still goes on the order below as
      * the contact number.
      */
-    const identityPhone = user?.isVerified && user?.phoneNumber ? user.phoneNumber.trim() : phoneNumber.trim();
+    const identityPhone = normalizeTypedPhone(user?.isVerified && user?.phoneNumber ? user.phoneNumber : phoneNumber);
 
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       email: email.trim(),
       phoneNumber: identityPhone,
       /*
@@ -286,26 +464,47 @@ export function useCheckout() {
       payload.address = deliveryAddress.formattedAddress;
       payload.coordinates = { latitude: deliveryAddress.lat, longitude: deliveryAddress.lng };
       payload.postalCode = deliveryAddress.postalCode;
-      payload.street = deliveryAddress.streetNumber;
-      payload.houseNumber = deliveryAddress.route;
+      // Google's `route` is the street and `street_number` the house number;
+      // these two were sent the other way round.
+      payload.street = deliveryAddress.route;
+      payload.houseNumber = deliveryAddress.streetNumber;
       payload.city = deliveryAddress.locality;
       payload.country = deliveryAddress.country;
     }
 
-    const res = await fetch(`${API_BASE_URL}/login`, {
-      method: 'POST',
-      headers: apiHeaders({ apiKey: storeInfo?.apiKey }),
-      body: JSON.stringify(payload),
-    });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json?.message || t.loginFailed || 'Login failed');
     /*
-     * `/login` cannot confirm verification — only `/user/login`, behind the OTP,
-     * does — so it must never be able to take it away either. Belt and braces
-     * next to the identity fix above.
+     * Blank fields are left out, never sent as "": with the Bearer token
+     * `/login` updates the customer's own record from the body, and an empty
+     * e-mail field (pickup asks for none) wiped the stored address.
      */
-    if (json?.data) setUser({ ...json.data, isVerified: json.data?.isVerified || user?.isVerified });
-    return json?.data;
+    const body = JSON.stringify(withoutBlankFields(payload));
+    const send = (authToken?: string) =>
+      fetch(`${API_BASE_URL}/login`, {
+        method: 'POST',
+        headers: apiHeaders({ apiKey: storeInfo?.apiKey, authToken }),
+        body,
+      });
+
+    // Signed in: the token lets `/login` update this customer's own record.
+    let authToken = user?.authToken;
+    let res = await send(authToken);
+    if (res.status === 401 && authToken && (await res.clone().json().catch(() => ({})))?.code !== 'INVALID_API_KEY') {
+      // The session expired. Sign out cleanly and carry on as a guest.
+      clearUser();
+      authToken = undefined;
+      res = await send();
+    }
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new ApiError(res.status, json?.code ?? json?.errorCode);
+    /*
+     * `/login` identifies, it does not authenticate: anyone can type any
+     * number here. Its answer is therefore never made into a session — that
+     * is how typing a stranger's number at checkout used to log you into
+     * their account (name, vouchers, order history). Only the id is used, as
+     * the order's customer; sessions come from `/user/login` behind the OTP.
+     */
+    const id = json?.data?._id ?? json?.data?.id;
+    return id ? { _id: String(id), authToken } : null;
   };
 
   /*
@@ -315,7 +514,7 @@ export function useCheckout() {
    * button, this turns "Store is closed" from an API into something the shop
    * would say — and covers every other coded refusal the order route raises.
    */
-  const translateOrderError = (body: any) => getTranslatedOrderApiErrorMessage(body?.errorCode, body?.message, t);
+  const translateOrderError = (e: unknown) => orderErrorText(e, language, formatPrice);
 
   const placeOrder = async () => {
     setTouched(true);
@@ -328,7 +527,20 @@ export function useCheckout() {
      * the form in and pressing the button.
      */
     if (isScheduled && scheduledSlot) {
-      if (!isSlotWithinOpeningHours(storeInfo?.timings, scheduledSlot.dayOffset, scheduledSlot.time)) {
+      const check = checkPreorderSlot(storeInfo?.timings, scheduledSlot);
+      if (check === 'past' || check === 'invalid') {
+        /*
+         * The slot passed between the last render and this tap. It is
+         * dropped — the order is now for "as soon as possible", which the
+         * timing choice shows — and nothing is sent: the guest confirms
+         * again. A past time is never sent.
+         */
+        clearPreorderSlot(slug);
+        setSubmitError(t.preorderSlotPassed ?? 'The chosen time has passed. Your order is now for as soon as possible.');
+        return;
+      }
+      // Outside the hours: the guest picks another time.
+      if (check !== 'ok') {
         setSubmitError(t.preorderSlotClosed ?? 'The chosen pre-order time is outside the opening hours.');
         return;
       }
@@ -354,6 +566,12 @@ export function useCheckout() {
     //   return;
     // }
 
+    // Offered when it was chosen is not offered now (store settings, a build without Stripe).
+    if (paymentMethod && !isPaymentMethodOffered(paymentMethod, storeInfo)) {
+      setSubmitError(apiErrorText('PAYMENT_METHOD_DISABLED', language, 'order'));
+      return;
+    }
+
     setPlacing(true);
     try {
       // Named apart from the context `user`: a `const user` here would shadow
@@ -374,9 +592,10 @@ export function useCheckout() {
                * view of it, and `user` covers the case where login was skipped.
                * Dine-in carries no customer at all.
                */
-              name: firstRealName(typedName, customer?.name, user?.name),
+              name: firstRealName(typedName, user?.name),
               email: email.trim(),
-              phoneNumber: phoneNumber.trim(),
+              // Cleaned of the separators people type ("030/123 45-67").
+              phoneNumber: normalizeTypedPhone(phoneNumber),
             },
         items: formatCartItemsForOrder(cart),
         totalOrderPrice: grandTotal,
@@ -386,21 +605,23 @@ export function useCheckout() {
         deliveryTime,
         tip,
         // When scheduled, the server derives deliveryType from deliverySchedule;
-        // otherwise standard vs priority.
-        deliverySpeed: isDelivery ? (timing === 'priority' ? 'priority' : 'standard') : undefined,
+        // otherwise standard vs priority — priority only with its fee.
+        deliverySpeed: isDelivery ? (timing === 'priority' && priorityFee > 0 ? 'priority' : 'standard') : undefined,
         priorityFee,
         instructions: orderMessage.trim(),
         orderSource: 'web',
         platform: 'WebShop',
-        isDiscounted: discountAmount > 0,
-        discountAmount,
-        isVoucherApplied: appliedVoucher != null,
+        // A voucher below its minimum is worth nothing and is not sent.
+        isDiscounted: voucherApplies,
+        discountAmount: voucherApplies ? discountAmount : 0,
+        isVoucherApplied: voucherApplies,
       };
 
       if (orderData.orderType === 'delivery') {
         orderData.addressDetails = {
-          street: deliveryAddress?.streetNumber || '',
-          houseNumber: deliveryAddress?.route || '',
+          // Street name and house number — Google calls them `route` and `street_number`.
+          street: deliveryAddress?.route || '',
+          houseNumber: deliveryAddress?.streetNumber || '',
           postalCode: deliveryAddress?.postalCode || '',
           city: deliveryAddress?.locality || '',
           address: deliveryAddress?.formattedAddress || '',
@@ -418,7 +639,7 @@ export function useCheckout() {
         };
       }
       if (customer?._id) orderData.customerId = customer._id;
-      if (appliedVoucher) {
+      if (appliedVoucher && voucherApplies) {
         orderData.vouchers = [
           {
             id: appliedVoucher.voucherId,
@@ -433,22 +654,21 @@ export function useCheckout() {
 
       // Scheduled / pre-order window
       let etaLabel: string | undefined;
-      const slot = isScheduled && scheduledSlot ? { dayOffset: scheduledSlot.dayOffset, time: scheduledSlot.time } : null;
+      /*
+       * The slot carries its own Berlin date, so this is the instant the guest
+       * picked — no "days from today" to count from a day that may have
+       * changed since.
+       */
+      const startAt = isScheduled && scheduledSlot ? slotInstant(scheduledSlot) : null;
 
-      if (slot) {
-        const day = moment.tz(TZ).add(slot.dayOffset, 'days').format('YYYY-MM-DD');
-        let start = moment.tz(`${day} ${slot.time}`, 'YYYY-MM-DD HH:mm', TZ);
-        if (slot.dayOffset === 0) {
-          const now = moment.tz(TZ);
-          if (start.isBefore(now.clone().subtract(6, 'hours'))) start = start.add(1, 'day');
-        }
-        const end = start.clone().add(isDelivery ? deliveryTime : 15, 'minutes');
+      if (startAt !== null) {
+        const endAt = startAt + (isDelivery ? deliveryTime : 15) * 60_000;
         orderData.deliverySchedule = {
           timezone: TZ,
-          scheduledDate: start.toDate(),
-          timeSlot: { startTime: start.format('HH:mm'), endTime: end.format('HH:mm') },
+          scheduledDate: new Date(startAt),
+          timeSlot: { startTime: berlinHHMM(startAt), endTime: berlinHHMM(endAt) },
         };
-        etaLabel = `${start.format('HH:mm')} – ${end.format('HH:mm')}`;
+        etaLabel = `${berlinHHMM(startAt)} – ${berlinHHMM(endAt)}`;
       }
 
       /*
@@ -457,8 +677,8 @@ export function useCheckout() {
        * or a customer coming back from Stripe lands on an empty screen while
        * the order is fetched — and on mobile, on nothing at all.
        */
-      const rememberOrder = (orderRef: string, paymentName: string) => {
-        storage.set(STORAGE_KEY, { customerName: customerName.trim(), email: email.trim(), phoneNumber: phoneNumber.trim() });
+      const rememberOrder = (orderRef: string, paymentName: string, cartCleared: boolean) => {
+        storage.set(contactStorageKey(slug), { customerName: customerName.trim(), email: email.trim(), phoneNumber: phoneNumber.trim() });
         savePlacedOrder(slug, {
           orderRef,
           isDelivery,
@@ -471,12 +691,20 @@ export function useCheckout() {
           items: cart.map((i) => ({
             name: i.product.name,
             qty: i.quantity,
-            lineTotal: i.product.currentPrice * i.quantity,
+            // Extras included — the same figure the cart and checkout showed.
+            lineTotal: cartLineTotal(i),
             image: i.product.images?.length ? getImageURL(i.product.images[0]) : '',
           })),
           placedAt: Date.now(),
+          cartCleared,
         });
       };
+
+      /*
+       * The attempt's key: kept while the payload is the same (a retry), new
+       * as soon as anything in it changes (a different order).
+       */
+      const idempotencyKey = orderAttemptKey(slug, JSON.stringify(orderData));
 
       /*
        * An online method reserves the order instead of placing it: the basket is
@@ -485,7 +713,7 @@ export function useCheckout() {
        * first would leave the kitchen cooking for a payment that may never come.
        */
       if (paymentMethod && ONLINE_METHODS.has(paymentMethod)) {
-        const reserved: any = await createUnconfirmedOrder(storeInfo?.adminId || '', storeInfo?.storeId || '', storeInfo?.apiKey || '', orderData);
+        const reserved: any = await createUnconfirmedOrder(storeInfo?.adminId || '', storeInfo?.storeId || '', storeInfo?.apiKey || '', orderData, idempotencyKey, customer?.authToken);
         const reservedId = reserved?.id || reserved?._id;
         if (!reservedId) throw new Error('Could not reserve the order');
 
@@ -509,7 +737,7 @@ export function useCheckout() {
         // The server's enum, matching what `fetchPlacedOrder` reads back off an
         // order — the screens translate it. Storing a display label here made the
         // snapshot and the fetched order disagree about the same payment.
-        rememberOrder(orderRef, ORDER_PAYMENT_METHOD[paymentMethod]);
+        rememberOrder(orderRef, ORDER_PAYMENT_METHOD[paymentMethod], false);
 
         setPayNow({
           clientSecret: intent.client_secret,
@@ -526,25 +754,41 @@ export function useCheckout() {
 
       const res = await fetch(`${API_BASE_URL}/order`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...apiHeaders({ apiKey: storeInfo?.apiKey, authToken: customer?.authToken }), 'Idempotency-Key': idempotencyKey },
         body: JSON.stringify(orderData),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(translateOrderError(err) || 'Failed to submit order');
+        throw new ApiError(res.status, err?.code ?? err?.errorCode, err?.data);
       }
       const result = await res.json();
-      const orderRef = result?.data?.collectionCode || result?.data?.id || '';
+      const orderRef = result?.data?.collectionCode || result?.data?.id || result?.data?._id || '';
 
       // Settled in person, so this one is final the moment the API answers.
-      rememberOrder(orderRef, paymentMethod ? ORDER_PAYMENT_METHOD[paymentMethod] : 'cash');
+      // The cart is emptied right here, so the confirmation must not do it again.
+      rememberOrder(String(orderRef), paymentMethod ? ORDER_PAYMENT_METHOD[paymentMethod] : 'cash', true);
 
+      clearOrderAttempt(slug);
+      try {
+        sessionStorage.removeItem(checkoutFormStorageKey(slug));
+      } catch {
+        /* storage unavailable */
+      }
       clearCart();
       clearPreorderSlot(slug);
-      toConfirmation(orderRef);
+      toConfirmation(String(orderRef));
     } catch (e) {
-      const coded = e instanceof Error ? translateOrderError({ errorCode: (e as any).errorCode, message: e.message }) : '';
-      setSubmitError(coded || 'An unknown error occurred while submitting your order.');
+      /*
+       * A coded refusal is final for this payload: a later try (after the
+       * shop opens, after fixing the basket) is a new attempt with a new key.
+       * Anything else — no answer, a 5xx — may have gone through, so the key
+       * is kept and a retry cannot create a second order.
+       */
+      const status = (e as ApiError)?.status;
+      if (typeof status === 'number' && status >= 400 && status < 500) clearOrderAttempt(slug);
+      // The server's clock says the slot has passed: drop it, as above.
+      if ((e as ApiError)?.code === 'PREORDER_IN_PAST') clearPreorderSlot(slug);
+      setSubmitError(translateOrderError(e));
       setPlacing(false);
     }
   };
@@ -555,14 +799,12 @@ export function useCheckout() {
    * the presentation asks for a choice rather than juggling the slot itself.
    */
   const chooseTiming = (next: 'standard' | 'priority') => {
-    setTiming(next);
-    setScheduledSlot(null);
+    setSpeed(next);
     savePreorderSlot(slug, null);
   };
 
+  // Stored, and read back through `useOrderingWindow` like a slot picked on the menu.
   const confirmSchedule = (slot: PreorderSlot) => {
-    setScheduledSlot(slot);
-    setTiming('scheduled');
     savePreorderSlot(slug, slot);
   };
 
@@ -573,7 +815,7 @@ export function useCheckout() {
 
   return {
     // context
-    t, storeInfo, cart, totalPrice, totalItems, discountAmount, appliedVoucher, orderMessage,
+    t, storeInfo, cart, totalPrice, totalItems, discountAmount, appliedVoucher, voucherBelowMinimum, voucherHint, orderMessage,
     orderType, setOrderType, deliveryAddress, setDeliveryAddress, savedAddresses, slug, toMenu,
     // mode
     isDineIn, isDelivery, isPickup,
@@ -592,6 +834,6 @@ export function useCheckout() {
     touched, placing, submitError, emailValid, phoneValid, missing, payNow, setPayNow,
     verifyOpen, setVerifyOpen,
     belowMinimum, deliveryUnavailable, storeClosed, slotOutsideHours, orderingClosed,
-    canPlace, placeLabel, placeHint, placeOrder,
+    canPlace, placeLabel, placeLabelShort, placeHint, placeOrder,
   };
 }

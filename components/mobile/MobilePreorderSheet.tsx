@@ -5,13 +5,11 @@ import { CalendarClock, Check, Clock, X } from 'lucide-react';
 import { Dialog } from '@base-ui/react/dialog';
 
 import WheelColumn, { Wheel, type WheelOption } from './WheelPicker';
-import type { PreorderSlot } from '~/components/menu/PreorderModal';
-import { generateDaySlots } from '~/lib/generateTimeSlotsWithinHours';
+import { bookableDays } from '~/lib/generateTimeSlotsWithinHours';
+import { formatSlotDay, formatSlotLabel, PREORDER_PICKER_LEAD_MINUTES, type PreorderSlot } from '~/lib/preorderSlot';
 import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
 import { useAddress } from '~/contexts/address-context';
-
-const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 
 /**
  * Pre-order picker for mobile: two scroll wheels, day and time.
@@ -27,41 +25,42 @@ export default function MobilePreorderSheet({ open, onClose, onConfirm, onStanda
   const { orderType } = useAddress();
   const isDelivery = orderType === 'delivery';
 
-  const [dayOffset, setDayOffset] = useState(0);
+  // The chosen day as a Berlin date; null until the guest turns the wheel.
+  const [pickedDate, setPickedDate] = useState<string | null>(null);
   const [time, setTime] = useState('');
 
-  const days = useMemo(() => {
-    const out: (WheelOption & { key: string; offset: number })[] = [];
-    for (let i = 0; i < 7; i += 1) {
-      const d = new Date();
-      d.setDate(d.getDate() + i);
-      const weekday = d.toLocaleDateString(language === 'de' ? 'de-DE' : 'en-GB', { weekday: 'long' });
-      out.push({
-        value: String(i),
-        label: i === 0 ? (t.today ?? 'Today') : i === 1 ? (t.tomorrow ?? 'Tomorrow') : weekday,
-        key: DAY_KEYS[d.getDay()],
-        offset: i,
-      });
-    }
-    return out;
-  }, [language, t]);
-
   /*
-   * Slots come from the store's hours for the chosen day — today from the next
-   * half hour after now, other days across their whole window, and never past
-   * midnight, since a 02:00 close belongs to the following date.
+   * The next 7 Berlin days with the times the store's hours allow — from half
+   * an hour after now, and with a night store's small hours (00:00 – 05:30)
+   * under the calendar date they fall on. Rebuilt on every opening so the
+   * wheel never offers a time that has passed meanwhile.
    */
-  const times = useMemo(
-    () => generateDaySlots({ weeklyHours: storeInfo?.timings as any, dayOffset, intervalMinutes: 30 }),
-    [storeInfo?.timings, dayOffset],
-  );
+  const days = useMemo(() => {
+    const now = Date.now();
+    return bookableDays({ weeklyHours: storeInfo?.timings, now, intervalMinutes: 30, minLeadMinutes: PREORDER_PICKER_LEAD_MINUTES }).map(
+      (d): WheelOption & { date: string; slots: string[] } => ({
+        value: d.date,
+        label: formatSlotDay(d.date, { today: t.today, tomorrow: t.tomorrow }, language, now),
+        date: d.date,
+        slots: d.slots,
+      }),
+    );
+    // `open` is a dependency on purpose: it is what makes "now" current.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [language, t, storeInfo?.timings, open]);
+
+  // Until the guest picks a day, the first one that still has a time on offer.
+  const day = days.find((d) => d.date === pickedDate) ?? days.find((d) => d.slots.length > 0) ?? days[0];
+  const times = day?.slots ?? [];
 
   // The chosen time may not exist on a newly chosen day; fall back to the first.
-  const activeTime = times.includes(time) ? time : times[0];
+  const activeTime = times.includes(time) ? time : (times[0] ?? '');
 
   const confirm = () => {
-    const day = days.find((d) => d.offset === dayOffset) ?? days[0];
-    onConfirm({ dayOffset: day.offset, time: activeTime, label: `${day.label} ${activeTime}` });
+    // No time on offer that day: saving would book "Heute undefined".
+    if (!day || !activeTime) return;
+    const slot = { date: day.date, time: activeTime };
+    onConfirm({ ...slot, label: formatSlotLabel(slot, { today: t.today, tomorrow: t.tomorrow }, language) });
     onClose();
   };
 
@@ -113,7 +112,7 @@ export default function MobilePreorderSheet({ open, onClose, onConfirm, onStanda
               <span className='min-w-0 flex-1'>
                 <span className='block text-base font-bold text-primary'>{t.chooseDeliveryTime ?? 'Choose a time'}</span>
                 <span className='mt-0.5 block text-[13px] font-medium text-primary/70'>
-                  {days[dayOffset]?.label} · {activeTime}
+                  {day?.label} · {activeTime}
                 </span>
               </span>
               <Check className='h-5 w-5 shrink-0 text-success' strokeWidth={2.6} />
@@ -124,8 +123,8 @@ export default function MobilePreorderSheet({ open, onClose, onConfirm, onStanda
                 ariaLabel={t.day ?? 'Day'}
                 className='flex-[1.3]'
                 options={days}
-                value={String(dayOffset)}
-                onChange={(v) => setDayOffset(Number(v))}
+                value={day?.date ?? ''}
+                onChange={setPickedDate}
               />
               <WheelColumn
                 ariaLabel={t.time ?? 'Time'}
@@ -136,7 +135,7 @@ export default function MobilePreorderSheet({ open, onClose, onConfirm, onStanda
               />
             </Wheel>
 
-            <button onClick={confirm} className='mt-4 h-14 w-full rounded-2xl bg-primary text-[15.5px] font-extrabold text-selected-text transition active:scale-[0.98]'>
+            <button onClick={confirm} disabled={!activeTime} className='mt-4 h-14 w-full rounded-2xl bg-primary text-[15.5px] font-extrabold text-selected-text transition active:scale-[0.98] disabled:opacity-60'>
               {t.save ?? 'Save'}
             </button>
           </Dialog.Popup>

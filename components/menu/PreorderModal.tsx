@@ -3,22 +3,21 @@
 import { useMemo, useState } from 'react';
 import { ChevronDown, Clock, X } from 'lucide-react';
 import { Dialog } from '@base-ui/react/dialog';
-import { generateDaySlots } from '~/lib/generateTimeSlotsWithinHours';
+import { bookableDays, shortDate } from '~/lib/generateTimeSlotsWithinHours';
+import { formatSlotDay, formatSlotLabel, PREORDER_PICKER_LEAD_MINUTES, type PreorderSlot } from '~/lib/preorderSlot';
+import { dayKeyOf } from '~/lib/berlinTime';
+import { dayHoursText } from '~/lib/restaurantTimings';
 import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
 import { useAddress } from '~/contexts/address-context';
 import { cn } from '~/lib/utils';
 
 /**
- * A confirmed pre-order slot. `dayOffset` is days from today (0 = today) —
- * the exact Berlin datetime is resolved at checkout so timezone handling stays
- * in one place.
+ * A confirmed pre-order slot: a Berlin calendar date and time. Defined in
+ * `lib/preorderSlot.ts`; re-exported here because the screens import it from
+ * the picker.
  */
-export type PreorderSlot = {
-  dayOffset: number;
-  time: string; // 'HH:MM'
-  label: string; // e.g. "Tomorrow 18:00"
-};
+export type { PreorderSlot };
 
 type Props = {
   open: boolean;
@@ -31,56 +30,50 @@ type Props = {
   onStandard?: () => void;
 };
 
-const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
-
-
 export default function PreorderModal({ open, onClose, onConfirm, onStandard }: Props) {
   const { t, language } = useLanguage();
   const storeInfo = useStore();
   const { orderType } = useAddress();
   const isDelivery = orderType === 'delivery';
 
-  const [dayIdx, setDayIdx] = useState(0);
-  const [time, setTime] = useState('18:00');
+  // The chosen day as a Berlin date; null until the guest picks one.
+  const [pickedDate, setPickedDate] = useState<string | null>(null);
+  const [time, setTime] = useState('');
 
-  // Build the next 7 days.
+  /*
+   * The next 7 Berlin days with their bookable times. Rebuilt each time the
+   * modal opens, so a modal opened again later does not offer times that have
+   * passed meanwhile. A night store's small hours (00:00 – 05:30) are listed
+   * under the date they fall on.
+   */
   const days = useMemo(() => {
-    const out: { idx: number; label: string; date: string; key: (typeof DAY_KEYS)[number] }[] = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date();
-      d.setDate(d.getDate() + i);
-      const weekday = d.toLocaleDateString(language === 'de' ? 'de-DE' : 'en-US', { weekday: 'long' });
-      out.push({
-        idx: i,
-        label: i === 0 ? (t.today ?? 'Today') : i === 1 ? (t.tomorrow ?? 'Tomorrow') : weekday,
-        date: `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}`,
-        key: DAY_KEYS[d.getDay()],
-      });
-    }
-    return out;
-  }, [language, t]);
+    const now = Date.now();
+    return bookableDays({ weeklyHours: storeInfo?.timings, now, intervalMinutes: 30, minLeadMinutes: PREORDER_PICKER_LEAD_MINUTES }).map((d) => ({
+      ...d,
+      label: formatSlotDay(d.date, { today: t.today, tomorrow: t.tomorrow }, language, now),
+      short: shortDate(d.date),
+      key: dayKeyOf(d.dayIndex),
+    }));
+    // `open` is a dependency on purpose: it is what makes "now" current.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [language, t, storeInfo?.timings, open]);
 
-  // The selected day's opening window, shown next to the time label.
-  const window = useMemo(() => {
-    const key = days[dayIdx]?.key;
-    const timings = storeInfo?.timings as Record<string, { open: string; close: string }> | null | undefined;
-    const win = timings && key ? timings[key] : undefined;
-    return win?.open && win?.close ? `${win.open} – ${win.close}` : '';
-  }, [days, dayIdx, storeInfo?.timings]);
+  // Until the guest picks a day, the first one that still has a time on offer.
+  const day = days.find((d) => d.date === pickedDate) ?? days.find((d) => d.slots.length > 0) ?? days[0];
 
-  // Same rules as the mobile sheet: today from the next half hour, other days
-  // across their window, never past midnight.
-  const times = useMemo(
-    () => generateDaySlots({ weeklyHours: storeInfo?.timings as any, dayOffset: dayIdx, intervalMinutes: 30 }),
-    [storeInfo?.timings, dayIdx],
-  );
+  // The selected day's opening hours (both windows on a split day), shown next to the time label.
+  const window = useMemo(() => (day ? (dayHoursText(storeInfo?.timings, day.dayIndex) ?? '') : ''), [day, storeInfo?.timings]);
+
+  const times = day?.slots ?? [];
 
   /* A day change can strip the chosen time, so fall back to the first on offer. */
   const activeTime = times.includes(time) ? time : (times[0] ?? '');
 
   const confirm = () => {
-    const day = days[dayIdx];
-    onConfirm({ dayOffset: day.idx, time, label: `${day.label} ${time}` });
+    // Nothing bookable on this day: there is no slot to save.
+    if (!day || !activeTime) return;
+    const slot = { date: day.date, time: activeTime };
+    onConfirm({ ...slot, label: formatSlotLabel(slot, { today: t.today, tomorrow: t.tomorrow }, language) });
     onClose();
   };
 
@@ -102,14 +95,14 @@ export default function PreorderModal({ open, onClose, onConfirm, onStandard }: 
             <div className='mb-2.5 text-[12px] font-bold uppercase tracking-[0.04em] text-muted-foreground'>{t.day ?? 'Day'}</div>
             <div className='noscroll -mx-0.5 flex gap-2.5 overflow-x-auto px-0.5'>
               {days.map((d) => {
-                const on = d.idx === dayIdx;
+                const on = d.date === day?.date;
                 return (
                   <button
-                    key={d.idx}
-                    onClick={() => setDayIdx(d.idx)}
+                    key={d.date}
+                    onClick={() => setPickedDate(d.date)}
                     className={cn('flex min-w-[72px] shrink-0 flex-col items-center gap-[3px] rounded-2xl border p-3.5 transition', on ? 'border-white bg-primary' : 'border-border bg-surface-1')}>
                     <span className={cn('text-[11px] font-bold uppercase tracking-[0.02em]', on ? 'text-selected-text/70' : 'text-muted-foreground')}>{d.label}</span>
-                    <span className={cn('text-[17px] font-extrabold', on ? 'text-selected-text' : 'text-white')}>{d.date}</span>
+                    <span className={cn('text-[17px] font-extrabold', on ? 'text-selected-text' : 'text-white')}>{d.short}</span>
                   </button>
                 );
               })}
@@ -141,7 +134,7 @@ export default function PreorderModal({ open, onClose, onConfirm, onStandard }: 
               <ChevronDown className='h-4 w-4 shrink-0 text-muted-foreground' strokeWidth={2.2} />
             </div>
 
-            <button onClick={confirm} className='mt-5 h-14 w-full rounded-2xl bg-primary text-[15.5px] font-extrabold text-selected-text transition active:scale-[0.98]'>
+            <button onClick={confirm} disabled={!activeTime} className='mt-5 h-14 w-full rounded-2xl bg-primary text-[15.5px] font-extrabold text-selected-text transition active:scale-[0.98] disabled:opacity-60'>
               {t.confirmPreorder ?? 'Confirm pre-order'}
             </button>
           </Dialog.Popup>

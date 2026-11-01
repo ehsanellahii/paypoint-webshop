@@ -25,7 +25,7 @@ export default function FavoriteButton({
   size?: number;
 }) {
   const storeInfo = useStore();
-  const { user } = useUser();
+  const { user, clearUser } = useUser();
   const customerId = user?._id;
 
   const [fav, setFav] = useState(false);
@@ -67,9 +67,12 @@ export default function FavoriteButton({
       adminId: storeInfo?.adminId,
       storeId: storeInfo?.storeId,
       customerId: customerId ?? undefined,
+      authToken: user?.authToken,
       slug,
       snapshot: { productId, name, image, price },
     });
+    // The server no longer accepts the session: sign out cleanly.
+    if (res.authExpired) clearUser();
     setFav(res.isNowFavorite);
     window.dispatchEvent(new Event('favorites:changed'));
   };

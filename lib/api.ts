@@ -20,7 +20,7 @@ export const PAYMENT_API_KEY = process.env.NEXT_PUBLIC_PAYMENT_API_KEY ?? '';
  * last caller set leaked into every later request that reused it — including
  * server-rendered ones serving a different store.
  */
-export function apiHeaders(opts: { apiKey?: string; adminId?: string; storeId?: string } = {}) {
+export function apiHeaders(opts: { apiKey?: string; adminId?: string; storeId?: string; authToken?: string } = {}) {
   const headers: Record<string, string> = {
     accept: 'application/json',
     'content-type': 'application/json',
@@ -28,17 +28,79 @@ export function apiHeaders(opts: { apiKey?: string; adminId?: string; storeId?: 
   if (opts.apiKey) headers['x-api-key'] = opts.apiKey;
   if (opts.adminId) headers['x-paypoint-tenant-id'] = opts.adminId;
   if (opts.storeId) headers['x-paypoint-store-id'] = opts.storeId;
+  /*
+   * The signed-in customer's own token (from `/user/login`). Since server 0051
+   * every customer route — orders, details, favourites — answers only to it;
+   * an id in the URL or body is no longer enough to read someone's data.
+   */
+  if (opts.authToken) headers.authorization = `Bearer ${opts.authToken}`;
   return headers;
 }
 
+/**
+ * An error from an integration call, carrying the server's stable `code`.
+ * Screens translate the code; the server's `message` is never shown.
+ */
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  /** Kept under the old name too: the checkout still reads `errorCode`. */
+  errorCode?: string;
+  data?: any;
+  constructor(status: number, code?: string, data?: any) {
+    super(code || `Request failed (${status})`);
+    this.status = status;
+    this.code = code;
+    this.errorCode = code;
+    this.data = data;
+  }
+}
+
+/** Build an `ApiError` from a failed response; 0051 sends `code`, older servers `errorCode`. */
+export async function apiErrorFrom(response: Response): Promise<ApiError> {
+  const body = await response.json().catch(() => ({}));
+  return new ApiError(response.status, body?.code ?? body?.errorCode, body?.data);
+}
+
+/**
+ * The customer's session is gone or was never valid — sign them out.
+ *
+ * 401 `AUTH_REQUIRED` covers a missing, expired or pre-0051 token (those carry
+ * no `typ` claim and are refused, so everyone signed in before the deploy
+ * lands here once); 403 `FORBIDDEN` means the stored id is not the token's.
+ * A bad API key (401 `INVALID_API_KEY`) is the shop's fault, not the
+ * customer's, and does not sign anybody out.
+ */
+export const isAuthFailure = (e: unknown) => {
+  const { status, code } = (e ?? {}) as ApiError;
+  if (code === 'INVALID_API_KEY') return false;
+  return status === 401 || (status === 403 && code === 'FORBIDDEN');
+};
+
 export const getStoreData = cache(async (slug: string, token?: string) => {
   if (!slug) return null;
-  const tokenParam = token ? `?token=${token}` : '';
-  // Public, and the source of the key itself — so it sends none.
-  const response = await fetch(`${API_BASE_URL}/slugs/${slug}${tokenParam}`, {
-    headers: apiHeaders(),
-    cache: 'no-store',
-  });
+  const tableToken = typeof token === 'string' ? token.trim() : '';
+  const fetchSlug = (withToken: string) =>
+    // Public, and the source of the key itself — so it sends none.
+    fetch(`${API_BASE_URL}/slugs/${encodeURIComponent(slug)}${withToken ? `?token=${encodeURIComponent(withToken)}` : ''}`, {
+      headers: apiHeaders(),
+      cache: 'no-store',
+    });
+
+  let response = await fetchSlug(tableToken);
+  let tableTokenInvalid = false;
+  /*
+   * A table token the server refuses — an old QR code, one from another
+   * store, a typo — is the guest's problem with a sticker, not a broken shop.
+   * The API answers 400 "Invalid table QR" for it, which used to throw here
+   * and put an English "Something went wrong" in front of a hungry guest. The
+   * store is loaded without the table instead, and flagged so the page can
+   * say so.
+   */
+  if (tableToken && [400, 403, 404].includes(response.status)) {
+    response = await fetchSlug('');
+    tableTokenInvalid = true;
+  }
   /*
    * A slug that names no store is a normal outcome, not a fault. Every asset
    * the browser guesses at on a first visit — /favicon.ico, /apple-touch-icon.png —
@@ -78,6 +140,11 @@ export const getStoreData = cache(async (slug: string, token?: string) => {
     city: data?.data?.place,
     phone: data?.data?.phone,
     email: data?.data?.emailAddress,
+    /*
+     * Imprint data (server 0051). Null on an older server — the legal pages
+     * then fall back to the store's name, address and contact.
+     */
+    legal: data?.data?.legal ?? null,
     logo: data?.data?.logoFileName ? `${getImageURL(data?.data?.logoFileName)}` : null,
     // `coverFileName` is read as well as `webShopSettings.coverImage` because
     // the two endpoints that answer for a store name it differently.
@@ -126,6 +193,7 @@ export const getStoreData = cache(async (slug: string, token?: string) => {
       tableId: data?.data?.tableInfo?.tableId || 0,
       tableNumber: data?.data?.tableInfo?.tableNumber || 0,
     },
+    tableTokenInvalid,
   };
 });
 
@@ -153,20 +221,22 @@ export const resolveFavorites = async (adminId: string, storeId: string, apiKey:
   };
 };
 
-export const syncFavorites = async (adminId: string, storeId: string, apiKey: string, customerId: string, productIds: string[]) => {
+export const syncFavorites = async (adminId: string, storeId: string, apiKey: string, customerId: string, productIds: string[], authToken?: string) => {
   if (!adminId || !storeId || !customerId) {
     throw new Error('Admin ID, Store ID, and Customer ID are required to sync favorites.');
   }
 
+  // The customer is taken from the token (0051); the id stays in the body for
+  // servers that still read it there.
   const response = await fetch(`${API_BASE_URL}/favorites/sync`, {
     method: 'POST',
-    headers: apiHeaders({ apiKey, adminId, storeId }),
+    headers: apiHeaders({ apiKey, adminId, storeId, authToken }),
     body: JSON.stringify({ customerId, productIds }),
     cache: 'no-store',
   });
 
   if (!response.ok) {
-    throw new Error('Failed to sync favorites');
+    throw await apiErrorFrom(response);
   }
   const data = await response.json();
   return data?.data;
@@ -235,9 +305,9 @@ export const fetchMenuData = async (adminId?: string, storeId?: string, apiKey?:
 };
 
 export type DeliveryZone = {
-  /** Whether the store delivers here. A store with no zones set delivers everywhere. */
+  /** Whether the store delivers here. A store with no zones set delivers nowhere (server 0051). */
   isAvailable: boolean;
-  /** False when the store has configured no zones at all. */
+  /** False when the store has configured no zones at all (then `isAvailable` is false too). */
   hasZones: boolean;
   postalCode: string;
   deliveryCharges: number | null;
@@ -274,40 +344,36 @@ export const checkDeliveryZone = async (
   return data?.data;
 };
 
-export const loginUser = async (adminId: string, storeId: string, apiKey: string, phoneNumberWithCode: string, name?: string) => {
+/**
+ * Sign in with a phone number Firebase has just verified.
+ *
+ * `idToken` is the Firebase ID token of that sign-in (server 0051): the server
+ * checks its `phone_number` against `phoneNumber`, so the number proved by the
+ * SMS is the only one this can log into. Without it anyone could claim any
+ * number and receive that customer's session.
+ */
+export const loginUser = async (adminId: string, storeId: string, apiKey: string, phoneNumberWithCode: string, name: string | undefined, idToken: string) => {
   const API_URL = `${API_BASE_URL}/user/login`;
   // `name` is optional server-side; sending it updates the stored customer name.
-  const requestBody = { phoneNumber: phoneNumberWithCode, signInSource: 'web', signInWith: 'phone', ...(name ? { name } : {}) };
-  try {
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: apiHeaders({ apiKey, adminId, storeId }),
-      body: JSON.stringify({
-        ...requestBody,
-      }),
-    });
+  // A blank name is left out rather than sent as "" (it would update the stored one).
+  const requestBody = { phoneNumber: phoneNumberWithCode, signInSource: 'web', signInWith: 'phone', idToken, ...(name?.trim() ? { name: name.trim() } : {}) };
+  const response = await fetch(API_URL, {
+    method: 'POST',
+    headers: apiHeaders({ apiKey, adminId, storeId }),
+    body: JSON.stringify(requestBody),
+  });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('Error response data:', errorData);
-      const error = new Error(errorData.message ?? `Login failed: ${response.status}`);
-      /*
-       * The status and the server's own code travel with the error. Callers
-       * need to tell "this number has no account yet" apart from "the login
-       * broke", and the message alone is a translated sentence that cannot be
-       * matched on safely.
-       */
-      (error as any).status = response.status;
-      (error as any).errorCode = errorData?.errorCode;
-      throw error;
-    }
-
-    const data = await response.json();
-    return data?.data; // assuming the user object is in data.data
-  } catch (error) {
-    console.error('Error during login:', error);
-    throw error;
+  if (!response.ok) {
+    /*
+     * The status and the server's own code travel with the error. Callers
+     * need to tell "this number has no account yet" apart from "the login
+     * broke", and the message is never shown to the customer.
+     */
+    throw await apiErrorFrom(response);
   }
+
+  const data = await response.json();
+  return data?.data;
 };
 
 /**
@@ -332,12 +398,13 @@ export const loginOrRegisterUser = async (
   storeId: string,
   apiKey: string,
   phoneNumberWithCode: string,
-  name?: string,
+  name: string | undefined,
+  idToken: string,
 ) => {
   try {
-    return await loginUser(adminId, storeId, apiKey, phoneNumberWithCode, name);
+    return await loginUser(adminId, storeId, apiKey, phoneNumberWithCode, name, idToken);
   } catch (error: any) {
-    const isUnknownNumber = error?.status === 404 || error?.errorCode === 'CUSTOMER_NOT_FOUND';
+    const isUnknownNumber = error?.status === 404 || error?.code === 'CUSTOMER_NOT_FOUND';
     if (!isUnknownNumber) throw error;
 
     return await registerUser(
@@ -346,6 +413,7 @@ export const loginOrRegisterUser = async (
       apiKey,
       name?.trim() || CUSTOMER_NAME_PLACEHOLDER,
       phoneNumberWithCode,
+      idToken,
     );
   }
 };
@@ -361,10 +429,11 @@ export const loginUserWithProvider = async (
   adminId: string,
   storeId: string,
   apiKey: string,
-  { email, name, provider }: { email: string; name?: string; provider: 'google' | 'apple' },
+  { email, name, provider, idToken }: { email: string; name?: string; provider: 'google' | 'apple'; idToken: string },
 ) => {
   const API_URL = `${API_BASE_URL}/user/login`;
 
+  // The server matches the token's verified `email` against this one (0051).
   const response = await fetch(API_URL, {
     method: 'POST',
     headers: apiHeaders({ apiKey, adminId, storeId }),
@@ -372,52 +441,45 @@ export const loginUserWithProvider = async (
       email,
       signInSource: 'web',
       signInWith: provider,
-      ...(name ? { name } : {}),
+      idToken,
+      ...(name?.trim() ? { name: name.trim() } : {}),
     }),
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message ?? `Login failed: ${response.status}`);
+    throw await apiErrorFrom(response);
   }
 
   const data = await response.json();
   return data?.data;
 };
 
-export const registerUser = async (adminId: string, storeId: string, apiKey: string, name: string, phoneNumberWithCode: string) => {
+export const registerUser = async (adminId: string, storeId: string, apiKey: string, name: string, phoneNumberWithCode: string, idToken: string) => {
   const API_URL = `${API_BASE_URL}/user/register`;
-  const requestBody = { name, phoneNumber: phoneNumberWithCode, signInSource: 'web', signInWith: 'phone' };
-  try {
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: apiHeaders({ apiKey, adminId, storeId }),
-      body: JSON.stringify(requestBody),
-    });
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('Error response data:', errorData);
-      throw new Error(errorData.message ?? `Registration failed: ${response.status}`);
-    }
-    const data = await response.json();
-    return data?.data; // assuming the user object is in data.data
-  } catch (error) {
-    console.error('Error during registration:', error);
-    throw error;
+  const requestBody = { name, phoneNumber: phoneNumberWithCode, signInSource: 'web', signInWith: 'phone', idToken };
+  const response = await fetch(API_URL, {
+    method: 'POST',
+    headers: apiHeaders({ apiKey, adminId, storeId }),
+    body: JSON.stringify(requestBody),
+  });
+  if (!response.ok) {
+    throw await apiErrorFrom(response);
   }
+  const data = await response.json();
+  return data?.data;
 };
 
-export const mergeFavorites = (adminId: string, storeId: string, apiKey: string, customerId: string, productIds: string[]) => {
+export const mergeFavorites = (adminId: string, storeId: string, apiKey: string, customerId: string, productIds: string[], authToken?: string) => {
   const API_URL = `${API_BASE_URL}/favorites/merge`;
 
   return fetch(API_URL, {
     method: 'POST',
-    headers: apiHeaders({ apiKey, adminId, storeId }),
+    headers: apiHeaders({ apiKey, adminId, storeId, authToken }),
     body: JSON.stringify({ customerId, productIds }),
   })
-    .then((response) => {
+    .then(async (response) => {
       if (!response.ok) {
-        throw new Error('Failed to merge favorites');
+        throw await apiErrorFrom(response);
       }
       return response.json();
     })
@@ -573,19 +635,22 @@ export const formatPrice = (value: number | string | null | undefined) => {
  * confirms an order — a customer who closes the tab mid-payment must not end up
  * with a paid order nobody is cooking, nor a cooked order nobody paid for.
  */
-export const createUnconfirmedOrder = async (adminId: string, storeId: string, apiKey: string, orderData: any) => {
+export const createUnconfirmedOrder = async (adminId: string, storeId: string, apiKey: string, orderData: any, idempotencyKey?: string, authToken?: string) => {
+  // The signed-in customer's token, so a voucher bound to them is accepted (server 0051).
+  const headers: Record<string, string> = apiHeaders({ apiKey, adminId, storeId, authToken });
+  // One key per order attempt: a retry of the same attempt gets the first
+  // reservation back instead of a second one (server 0051).
+  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
   const res = await fetch(`${API_BASE_URL}/order/unconfirmed`, {
     method: 'POST',
-    headers: apiHeaders({ apiKey, adminId, storeId }),
+    headers,
     body: JSON.stringify(orderData),
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     // The code travels with the error, so the checkout can say the refusal in
     // the customer's language rather than echoing the server's English.
-    const err: any = new Error(json?.message || 'Could not reserve the order');
-    err.errorCode = json?.errorCode;
-    throw err;
+    throw new ApiError(res.status, json?.code ?? json?.errorCode, json?.data);
   }
   return json?.data ?? json;
 };

@@ -6,7 +6,8 @@ import { Dialog } from '@base-ui/react/dialog';
 import { useCart } from '~/contexts/cart-context';
 import { formatPrice, fetchCartRecommendations } from '@/lib/api';
 import { useLanguage } from '@/contexts/language-context';
-import { cn, getImageURL, MenuProduct } from '~/lib/utils';
+import { cartLineTotal, cn, getImageURL, MenuProduct } from '~/lib/utils';
+import { isSoldOut, requiresConfiguration } from '~/lib/productConfig';
 import { useStore } from '~/contexts/store-context';
 import SmartImage from '~/lib/SmartImage';
 import { flyToCart } from '~/lib/flyToCart';
@@ -89,8 +90,9 @@ export default function Cart({ isOpen: controlledIsOpen, onOpenChange, recommend
     };
   }, [isOpen, cartKey, storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey]);
 
-  const fallbackRecs = recommendations.filter((p) => !cart.some((c) => c.product.id === p.id)).slice(0, 8);
-  const recs = (serverRecs.length > 0 ? serverRecs : fallbackRecs).filter((p) => !cart.some((c) => c.product.id === p.id)).slice(0, 8);
+  // Nothing sold out is recommended — it could only be refused at checkout.
+  const fallbackRecs = recommendations.filter((p) => !isSoldOut(p) && !cart.some((c) => c.product.id === p.id)).slice(0, 8);
+  const recs = (serverRecs.length > 0 ? serverRecs : fallbackRecs).filter((p) => !isSoldOut(p) && !cart.some((c) => c.product.id === p.id)).slice(0, 8);
 
   // Checkout is its own route; validation lives there (inline, not alerts).
   const proceed = () => {
@@ -169,7 +171,8 @@ export default function Cart({ isOpen: controlledIsOpen, onOpenChange, recommend
                           <div className='min-w-0 flex-1'>
                             <div className='text-base font-bold leading-[1.3]'>{item.product.name}</div>
                             {subtitle && <div className='mt-[3px] line-clamp-2 text-[13px] font-medium leading-[1.5] text-muted-foreground'>{subtitle}</div>}
-                            <div className='mt-2.5 text-[15px] font-extrabold text-white'>{formatPrice(item.product.currentPrice * item.quantity)}</div>
+                            {/* Extras included — the same figure checkout and the order use. */}
+                            <div className='mt-2.5 text-[15px] font-extrabold text-white'>{formatPrice(cartLineTotal(item))}</div>
                             {item.notes && <div className='mt-[5px] text-xs font-medium italic text-muted-foreground'>„{item.notes}“</div>}
                           </div>
 
@@ -203,7 +206,8 @@ export default function Cart({ isOpen: controlledIsOpen, onOpenChange, recommend
                   <div className='noscroll mt-3.5 flex gap-3.5 overflow-x-auto pb-1'>
                     {recs.map((r) => {
                       const img = r.images?.length ? getImageURL(r.images[0]) : logoURL;
-                      const requiresModal = r.haveCustomizations && (r.addOns || []).some((g) => (g.minimumQuantity ?? 0) > 0);
+                      // A size or a required option to choose: the product dialog, not a quick add.
+                      const requiresModal = requiresConfiguration(r);
                       return (
                         <div key={r.id} className='w-[170px] shrink-0'>
                           <div className='relative'>

@@ -16,7 +16,7 @@ import RouteMap from '~/components/checkout/RouteMap';
 import StripePaymentSheet from '~/components/checkout/StripePaymentSheet';
 import PhoneVerifyDialog from '~/components/checkout/PhoneVerifyDialog';
 import { cartLineExtras } from '~/lib/cartLine';
-import { cn, formatEtaRange, getImageURL } from '~/lib/utils';
+import { cartLineTotal, cn, formatEtaRange, getImageURL } from '~/lib/utils';
 
 const rowInput = 'min-w-0 flex-1 border-none bg-transparent text-[14.5px] font-semibold text-white placeholder:text-muted-foreground';
 
@@ -52,7 +52,7 @@ function FieldError({ message }: { message?: string }) {
  */
 export default function MobileCheckoutScreen() {
   const c = useCheckout();
-  const { back, toAccount, base } = useStoreNavigation();
+  const { back, toAccount, base, withToken } = useStoreNavigation();
   const { t } = c;
 
   const logo = c.storeInfo?.settings?.logo || c.storeInfo?.logo || '';
@@ -254,7 +254,7 @@ export default function MobileCheckoutScreen() {
             <span className='block text-[15px] font-bold text-white'>{c.paymentMethod ? paymentMethodLabel(c.paymentMethod, t) : (t.choosePaymentMethod ?? 'Choose a payment method')}</span>
             {/* Until a method is chosen the design lists what is on offer, not where you pay. */}
             <span className='mt-0.5 block text-[12.5px] font-medium text-muted-foreground'>
-              {c.paymentMethod ? paymentMethodSub(c.paymentMethod, t, c.isDelivery) : (t.paymentMethodsSummary ?? '')}
+              {c.paymentMethod ? paymentMethodSub(c.paymentMethod, t, c.isDelivery, c.isDineIn) : (t.paymentMethodsSummary ?? '')}
             </span>
           </span>
           <ChevronRight className='h-[17px] w-[17px] text-muted-foreground' />
@@ -300,7 +300,7 @@ export default function MobileCheckoutScreen() {
           <span className='min-w-0 flex-1'>
             <span className='block text-[15px] font-bold text-white'>{c.appliedVoucher ? `${t.voucher} ${c.appliedVoucher.code}` : (t.redeemCode ?? t.addVoucher)}</span>
             <span className='mt-0.5 block text-[12.5px] font-medium text-muted-foreground'>
-              {c.appliedVoucher ? (c.appliedVoucher.description ?? `−${formatPrice(c.discountAmount)}`) : (t.enterPromoCode ?? t.redeemCodeAndSave)}
+              {c.voucherHint ?? (c.appliedVoucher ? (c.appliedVoucher.description ?? `−${formatPrice(c.discountAmount)}`) : (t.enterPromoCode ?? t.redeemCodeAndSave))}
             </span>
           </span>
           <ChevronRight className='h-[17px] w-[17px] text-muted-foreground' />
@@ -325,7 +325,7 @@ export default function MobileCheckoutScreen() {
                   {item.product.name}
                   {extras && <span className='mt-0.5 block truncate text-[11px] font-medium text-muted-foreground'>{extras}</span>}
                 </div>
-                <div className='shrink-0 text-[12.5px] font-bold text-white'>{formatPrice(item.product.currentPrice * item.quantity)}</div>
+                <div className='shrink-0 text-[12.5px] font-bold text-white'>{formatPrice(cartLineTotal(item))}</div>
               </div>
             );
           })}
@@ -384,7 +384,8 @@ export default function MobileCheckoutScreen() {
             <Loader2 className='mx-auto h-5 w-5 animate-spin' />
           ) : (
             <>
-              <span className='min-w-0 flex-1 truncate text-[15px] font-extrabold tracking-[-0.01em]'>{c.placeLabel}</span>
+              {/* The price sits to the right, so the words go without it (it was shown twice). */}
+              <span className='min-w-0 flex-1 truncate text-[15px] font-extrabold tracking-[-0.01em]'>{c.placeLabelShort}</span>
               <span className='shrink-0 whitespace-nowrap text-base font-extrabold'>{formatPrice(c.grandTotal)}</span>
             </>
           )}
@@ -417,7 +418,7 @@ export default function MobileCheckoutScreen() {
           stripeAccountId={c.payNow.stripeAccountId}
           amount={c.payNow.amount}
           method={c.payNow.method}
-          returnUrl={typeof window !== 'undefined' ? `${window.location.origin}${base}/confirmation?order=${c.payNow.orderId}` : ''}
+          returnUrl={typeof window !== 'undefined' ? `${window.location.origin}${withToken(`${base}/confirmation`, { order: c.payNow.orderId })}` : ''}
         />
       )}
 

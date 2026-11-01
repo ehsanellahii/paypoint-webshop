@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, MapPin, Menu as MenuIcon, Plus, Search, X } from 'lucide-react';
 
 import MobileShell, { MobileScreen, SAFE_TOP } from '~/components/mobile/MobileShell';
 import MobileSkeleton from '~/components/mobile/MobileSkeleton';
-import { fetchMenuData, formatPrice, getCategories } from '~/lib/api';
-import { cn, formatEtaRange, getImageURL, getPostalRateInfo, IMenuData, MenuProduct } from '~/lib/utils';
+import { formatPrice, getCategories } from '~/lib/api';
+import { cn, formatEtaRange, getImageURL, MenuProduct } from '~/lib/utils';
 import SmartImage from '~/lib/SmartImage';
 import { getStoreCover } from '~/lib/storeMedia';
 import { getTodayTimings, isRestaurantOpen } from '~/lib/restaurantTimings';
@@ -21,6 +21,15 @@ import DeliveryAddressModal from '~/components/dialogs/DeliveryAddressModal';
 import CartToast from '~/components/menu/CartToast';
 import ZoneCheckGate from '~/components/onboarding/ZoneCheckGate';
 import { useZoneGate } from '~/hooks/useZoneGate';
+import { useMenu } from '~/hooks/useMenu';
+import { isSoldOut, requiresConfiguration } from '~/lib/productConfig';
+
+/**
+ * Where the menu list was scrolled to, per store, for this browser session.
+ * The menu is unmounted while a product or the cart is open, and coming back
+ * used to start at the top every time.
+ */
+const savedScroll = new Map<string, number>();
 
 /**
  * Mobile menu — the hub every other screen returns to.
@@ -34,46 +43,54 @@ export default function MobileMenuScreen() {
   const storeInfo = useStore();
   const { t } = useLanguage();
   const { cart, addToCart, totalItems, totalPrice } = useCart();
-  const { orderType, deliveryAddress, setDeliveryAddress, setOrderType } = useAddress();
+  const { deliveryAddress, setDeliveryAddress, setOrderType, deliveryRate } = useAddress();
   const { toProduct, toCart } = useStoreNavigation();
   const { showGate, dismissGate } = useZoneGate();
 
-  const [menuData, setMenuData] = useState<IMenuData | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Shared with the product screen and kept for the session, so coming back
+  // from a product shows the menu at once instead of a skeleton.
+  const { menuData, loading } = useMenu();
   const [activeCategory, setActiveCategory] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [addressOpen, setAddressOpen] = useState(false);
   const [query, setQuery] = useState('');
   const catBarRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchMenuData(storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey, orderType)
-      .then((data) => {
-        if (cancelled) return;
-        setMenuData(data);
-        const cats = getCategories(data);
-        if (cats.length) setActiveCategory(cats[0].id);
-      })
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-    // Refetched when the customer switches between collection and delivery:
-    // the prices the server sends depend on it.
-  }, [storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey, orderType]);
+  // The cover is the first child of the scrolling sheet; its parent scrolls.
+  const coverRef = useRef<HTMLDivElement>(null);
+  const scrollKey = storeInfo?.slug || 'default';
 
   const categories = menuData ? getCategories(menuData) : [];
   const q = query.trim().toLowerCase();
+  // The first section until the scroll-spy or a tap picks one.
+  const shownCategory = activeCategory || categories[0]?.id || '';
 
+  // Same match as the desktop menu: name, description, or the category's name.
   const sections = useMemo(() => {
     if (!q) return categories;
     return categories
-      .map((c) => ({ ...c, products: c.products.filter((p) => p.name.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q)) }))
+      .map((c) => ({
+        ...c,
+        products: c.products.filter((p) => p.name.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q) || c.name.toLowerCase().includes(q)),
+      }))
       .filter((c) => c.products.length > 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [menuData, q]);
+
+  /*
+   * Remember the list's position as it scrolls, and put it back when the menu
+   * is shown again — before paint, so it does not visibly jump.
+   */
+  const hasMenu = !!menuData && !loading;
+  useLayoutEffect(() => {
+    const scroller = coverRef.current?.parentElement;
+    if (!hasMenu || !scroller) return;
+    const top = savedScroll.get(scrollKey);
+    if (top) scroller.scrollTop = top;
+    const onScroll = () => savedScroll.set(scrollKey, scroller.scrollTop);
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    return () => scroller.removeEventListener('scroll', onScroll);
+  }, [hasMenu, scrollKey]);
 
   // Scroll-spy over the section headings.
   useEffect(() => {
@@ -88,9 +105,9 @@ export default function MobileMenuScreen() {
   // Keep the active chip in view as the list scrolls past its section.
   useEffect(() => {
     const bar = catBarRef.current;
-    const chip = bar?.querySelector<HTMLElement>(`[data-chip="${activeCategory}"]`);
+    const chip = bar?.querySelector<HTMLElement>(`[data-chip="${shownCategory}"]`);
     if (bar && chip) bar.scrollTo({ left: Math.max(0, chip.offsetLeft - bar.clientWidth / 2 + chip.offsetWidth / 2), behavior: 'smooth' });
-  }, [activeCategory]);
+  }, [shownCategory]);
 
   if (loading) return <MobileSkeleton />;
 
@@ -99,7 +116,8 @@ export default function MobileMenuScreen() {
   const cover = getStoreCover(storeInfo);
   const open = isRestaurantOpen(storeInfo?.timings || {});
   const { close } = getTodayTimings(storeInfo?.timings);
-  const rate = getPostalRateInfo(Number(deliveryAddress?.postalCode || 0), storeInfo?.postalRates || []);
+  // The server's delivery terms for this address, as checkout uses them.
+  const rate = deliveryRate;
   const addrShort = deliveryAddress ? `${deliveryAddress.route ?? ''} ${deliveryAddress.streetNumber ?? ''}`.trim() || deliveryAddress.formattedAddress : t.deliveryAddress;
 
   const jumpTo = (id: string) => {
@@ -111,7 +129,7 @@ export default function MobileMenuScreen() {
     <MobileShell>
       <MobileScreen>
         {/* Cover */}
-        <div className='relative h-[226px]'>
+        <div ref={coverRef} className='relative h-[226px]'>
           <div
             className='absolute inset-0 bg-card bg-cover'
             style={cover ? { backgroundImage: `url("${cover}")`, backgroundPosition: 'center 38%', filter: 'contrast(1.04) saturate(1.06) brightness(.94)' } : undefined}
@@ -196,7 +214,7 @@ export default function MobileMenuScreen() {
                         onClick={() => jumpTo(c.id)}
                         className={cn(
                           'shrink-0 whitespace-nowrap py-1.5 text-[15px] transition',
-                          activeCategory === c.id ? 'font-extrabold text-white' : 'font-semibold text-muted-foreground'
+                          shownCategory === c.id ? 'font-extrabold text-white' : 'font-semibold text-muted-foreground'
                         )}>
                         {c.name}
                       </button>
@@ -300,11 +318,16 @@ function MobileProductRow({
 
   const line = cart.find((i) => i.product.id === product.id);
   const qty = line?.quantity ?? 0;
-  const requiresModal = product.haveCustomizations && (product.addOns || []).some((g) => (g.minimumQuantity ?? 0) > 0);
+  /*
+   * A size to pick or a required option group has to be chosen first, and a
+   * sold-out product cannot be added at all — both open the product screen.
+   * The old rule here only looked at option groups, so "+" put a two-size
+   * pizza in the cart with no size, and checkout's reconcile then dropped it.
+   */
+  const requiresModal = requiresConfiguration(product) || isSoldOut(product);
 
   const add = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
-    // Anything with a required option group has to be configured first.
     if (requiresModal) {
       onOpen();
       return;

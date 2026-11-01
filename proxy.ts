@@ -41,11 +41,53 @@ const domainCache = new Map<string, CacheEntry>();
 const HIT_TTL_MS = 5 * 60_000;
 const MISS_TTL_MS = 60_000;
 const ERROR_TTL_MS = 10_000;
+/*
+ * Bounded (1.11.2026). The Host header is chosen by whoever sends the request,
+ * so an unbounded map grew by one entry per invented hostname. A Map keeps
+ * insertion order, which makes it a small LRU: a hit is moved to the end, and
+ * the oldest entry goes when the map is full.
+ */
+const MAX_CACHE_ENTRIES = 500;
+/** Lookups already on their way, so a burst for one host costs one request. */
+const inflight = new Map<string, Promise<string | null>>();
+
+function remember(host: string, entry: CacheEntry) {
+  domainCache.delete(host);
+  domainCache.set(host, entry);
+  while (domainCache.size > MAX_CACHE_ENTRIES) {
+    const oldest = domainCache.keys().next().value;
+    if (oldest === undefined) break;
+    domainCache.delete(oldest);
+  }
+}
+
+/*
+ * Only something that can be a registered domain is looked up: letters,
+ * digits and hyphens in dot-separated labels, a dot somewhere, a TLD of
+ * letters. An IP address, `localhost`-like names and junk never reach the API.
+ */
+const DOMAIN_SHAPE = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+const isLookupableHost = (host: string) => DOMAIN_SHAPE.test(host);
 
 async function resolveSlugForHost(host: string): Promise<string | null> {
-  const cached = domainCache.get(host);
-  if (cached && cached.expires > Date.now()) return cached.slug;
+  if (!isLookupableHost(host)) return null;
 
+  const cached = domainCache.get(host);
+  if (cached && cached.expires > Date.now()) {
+    // Most recently used goes to the back of the line.
+    remember(host, cached);
+    return cached.slug;
+  }
+
+  const pending = inflight.get(host);
+  if (pending) return pending;
+
+  const lookup = lookupSlug(host).finally(() => inflight.delete(host));
+  inflight.set(host, lookup);
+  return lookup;
+}
+
+async function lookupSlug(host: string): Promise<string | null> {
   try {
     const response = await fetch(`${API_BASE_URL}/domains/${encodeURIComponent(host)}`, {
       headers: { accept: 'application/json' },
@@ -59,14 +101,16 @@ async function resolveSlugForHost(host: string): Promise<string | null> {
     });
 
     if (response.status === 404) {
-      domainCache.set(host, { slug: null, expires: Date.now() + MISS_TTL_MS });
+      remember(host, { slug: null, expires: Date.now() + MISS_TTL_MS });
       return null;
     }
     if (!response.ok) throw new Error(`Domain lookup failed: ${response.status}`);
 
     const body = await response.json();
-    const slug = body?.data?.slug ?? null;
-    domainCache.set(host, { slug, expires: Date.now() + (slug ? HIT_TTL_MS : MISS_TTL_MS) });
+    const raw = body?.data?.slug;
+    // A slug becomes a path segment below, so only a plain one is accepted.
+    const slug = typeof raw === 'string' && /^[a-z0-9][a-z0-9-_]*$/i.test(raw) ? raw : null;
+    remember(host, { slug, expires: Date.now() + (slug ? HIT_TTL_MS : MISS_TTL_MS) });
     return slug;
   } catch {
     /*
@@ -74,7 +118,7 @@ async function resolveSlugForHost(host: string): Promise<string | null> {
      * only briefly — long enough to stop a hard outage turning into a request
      * storm, short enough that the site returns as soon as the API does.
      */
-    domainCache.set(host, { slug: null, expires: Date.now() + ERROR_TTL_MS });
+    remember(host, { slug: null, expires: Date.now() + ERROR_TTL_MS });
     return null;
   }
 }
@@ -86,6 +130,12 @@ export async function proxy(request: NextRequest) {
 
   const headers = new Headers(request.headers);
   headers.set(DEVICE_HEADER, device);
+  /*
+   * Ours to set, never the client's. A request on the platform host that
+   * brought its own `x-custom-domain` would otherwise make the page drop the
+   * slug from every link and canonical as if it were a restaurant's domain.
+   */
+  headers.delete(CUSTOM_DOMAIN_HEADER);
 
   /*
    * No `Vary: User-Agent` here on purpose. The HTML does differ by device, so

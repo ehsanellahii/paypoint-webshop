@@ -1,17 +1,18 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Check, Loader2, Minus, Plus, X } from 'lucide-react';
 
 import MobileShell from '~/components/mobile/MobileShell';
-import { fetchMenuData, formatPrice, getAllProducts } from '~/lib/api';
+import { formatPrice, getAllProducts } from '~/lib/api';
 import { AddOnGroup, cn, getImageURL, MenuProduct } from '~/lib/utils';
 import SmartImage from '~/lib/SmartImage';
-import { useAddress } from '~/contexts/address-context';
+import { useMenu } from '~/hooks/useMenu';
 import { useCart } from '~/contexts/cart-context';
 import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
 import { useStoreNavigation } from '~/hooks/useStoreNavigation';
+import { isSoldOut } from '~/lib/productConfig';
 
 type Customization = Record<string, Record<string, number>>;
 
@@ -23,12 +24,17 @@ export default function MobileProductScreen({ productId }: { productId: string }
   const { t } = useLanguage();
   const storeInfo = useStore();
   const { addToCart } = useCart();
-  // The prices this screen shows depend on how the order is being placed.
-  const { orderType } = useAddress();
   const { back, toMenu } = useStoreNavigation();
 
-  const [product, setProduct] = useState<MenuProduct | null>(null);
-  const [loading, setLoading] = useState(true);
+  /*
+   * The menu the menu screen already loaded, priced for the current order
+   * type — opening a product used to download the whole menu again.
+   */
+  const { menuData, loading } = useMenu();
+  const product = useMemo<MenuProduct | null>(
+    () => (menuData ? (getAllProducts(menuData).find((p) => String(p.id) === productId || String(p._id) === productId) ?? null) : null),
+    [menuData, productId],
+  );
   const [quantity, setQuantity] = useState(1);
   const [selected, setSelected] = useState<Customization>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -37,22 +43,6 @@ export default function MobileProductScreen({ productId }: { productId: string }
   const skus = product?.skus ?? [];
   const selectedSku =
     skus.find((sku) => sku._id === selectedSkuId) ?? skus.find((sku) => sku.available) ?? skus[0];
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchMenuData(storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey, orderType)
-      .then((data) => {
-        if (cancelled) return;
-        const found = getAllProducts(data).find((p) => String(p.id) === productId || String(p._id) === productId) ?? null;
-        setProduct(found);
-      })
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-    // Refetched when the customer switches between collection and delivery:
-    // the prices the server sends depend on it.
-  }, [productId, storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey, orderType]);
 
   const groupTotal = (sectionId: string) => Object.values(selected[sectionId] ?? {}).reduce((a, b) => a + b, 0);
 
@@ -102,7 +92,8 @@ export default function MobileProductScreen({ productId }: { productId: string }
   }, [product, selected, quantity, selectedSku]);
 
   const submit = () => {
-    if (!product) return;
+    // Every size sold out: nothing to add (the menu's "+" opens this screen for it).
+    if (!product || isSoldOut(product)) return;
     const next: Record<string, string> = {};
     for (const section of product.addOns ?? []) {
       const min = section.minimumQuantity ?? 0;
@@ -273,7 +264,7 @@ export default function MobileProductScreen({ productId }: { productId: string }
             <Plus className='h-[18px] w-[18px]' strokeWidth={2.4} />
           </button>
         </div>
-        <button onClick={submit} className='h-[52px] flex-1 rounded-2xl bg-primary text-[15px] font-extrabold text-selected-text transition active:scale-[0.98]'>
+        <button onClick={submit} disabled={!!product && isSoldOut(product)} className='h-[52px] flex-1 rounded-2xl bg-primary text-[15px] font-extrabold text-selected-text transition active:scale-[0.98]'>
           {t.addToCart} · {formatPrice(total)}
         </button>
       </div>

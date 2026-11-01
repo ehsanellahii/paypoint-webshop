@@ -16,13 +16,15 @@ import UserDrawer from '~/components/Header/UserDrawer';
 import DeliveryAddressModal from '~/components/dialogs/DeliveryAddressModal';
 import CartToast from '~/components/menu/CartToast';
 import VoucherFlash from '~/components/checkout/VoucherFlash';
-import PreorderModal, { type PreorderSlot } from '~/components/menu/PreorderModal';
+import PreorderModal from '~/components/menu/PreorderModal';
 import RestaurantInfoModal from '~/components/menu/RestaurantInfoModal';
 import ZoneCheckGate from '~/components/onboarding/ZoneCheckGate';
 import { useZoneGate } from '~/hooks/useZoneGate';
-import { savePreorderSlot } from '~/lib/preorderSlot';
-import { fetchMenuData, getCategories, getAllProducts } from '@/lib/api';
-import { IMenuData, MenuProduct } from '~/lib/utils';
+import { formatSlotLabel, savePreorderSlot } from '~/lib/preorderSlot';
+import { useOrderingWindow } from '~/hooks/useOrderingWindow';
+import { getCategories, getAllProducts } from '@/lib/api';
+import { useMenu } from '~/hooks/useMenu';
+import { MenuProduct } from '~/lib/utils';
 import LoadingSkeleton from './LoadingSkeleton';
 import { useStore } from '~/contexts/store-context';
 import { useCart } from '~/contexts/cart-context';
@@ -31,14 +33,22 @@ import { useLanguage } from '~/contexts/language-context';
 
 export default function HomeScreen() {
   const storeInfo = useStore();
-  const { t } = useLanguage();
-  const { totalItems, totalPrice, pruneUnavailable } = useCart();
-  const [prunedCount, setPrunedCount] = useState(0);
+  const { t, language } = useLanguage();
+  /*
+   * Lines the last menu check took out of the cart — sold out, removed from
+   * the menu, from another store. Reported by the cart (see `lastReconcile`),
+   * whichever screen's menu load did the removing.
+   */
+  const { totalItems, totalPrice, lastReconcile, dismissReconcileNotice } = useCart();
   const { orderType, deliveryAddress, setDeliveryAddress, setOrderType } = useAddress();
 
-  const [menuData, setMenuData] = useState<IMenuData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  /*
+   * Loaded once the stored order type is known, with late answers for an
+   * order type no longer chosen dropped — see `useMenu`. A switch between
+   * collection and delivery keeps the current menu on screen until the newly
+   * priced one arrives.
+   */
+  const { menuData, loading, error } = useMenu();
   const [activeCategory, setActiveCategory] = useState('');
   const [query, setQuery] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<MenuProduct | null>(null);
@@ -52,41 +62,18 @@ export default function HomeScreen() {
   const [addressOpen, setAddressOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [preorderOpen, setPreorderOpen] = useState(false);
-  const [scheduledSlot, setScheduledSlot] = useState<PreorderSlot | null>(null);
+  /*
+   * The stored pre-order slot, as the cart and checkout read it — so a slot
+   * that has passed (dropped there) or one from before a reload shows here too.
+   */
+  const { slot: preorderSlot } = useOrderingWindow();
+  const preorderLabel = preorderSlot ? formatSlotLabel(preorderSlot, { today: t.today, tomorrow: t.tomorrow }, language) : undefined;
   const { showGate, dismissGate } = useZoneGate();
 
-  useEffect(() => {
-    async function loadMenu() {
-      try {
-        setLoading(true);
-        const data = await fetchMenuData(storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey, orderType);
-        setMenuData(data);
-        const categories = getCategories(data);
-        if (categories.length > 0) setActiveCategory(categories[0].id);
-      } catch (err: any) {
-        setError(err?.message ?? 'Failed to load menu data');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadMenu();
-    // Refetched when the customer switches between collection and delivery:
-    // the prices the server sends depend on it.
-  }, [storeInfo?.adminId, storeInfo?.storeId, storeInfo?.apiKey, orderType]);
-
   const productsByCategory = menuData ? getCategories(menuData) : [];
+  // The first section until the scroll-spy or a tap picks one.
+  const shownCategory = activeCategory || productsByCategory[0]?.id || '';
   const allProducts = menuData ? getAllProducts(menuData) : [];
-
-  // Reconcile a persisted cart against the live menu. Items that were removed,
-  // deactivated, or left over from another store would otherwise fail the whole
-  // order server-side with "Invalid product" at checkout.
-  useEffect(() => {
-    if (!menuData) return;
-    const validIds = getAllProducts(menuData).map((p) => String(p.id ?? p._id));
-    const removed = pruneUnavailable(validIds);
-    if (removed > 0) setPrunedCount(removed);
-  }, [menuData, pruneUnavailable]);
 
   const q = query.trim().toLowerCase();
   const filteredCategories = useMemo(() => {
@@ -143,7 +130,8 @@ export default function HomeScreen() {
     return (
       <div className='flex min-h-screen items-center justify-center bg-background'>
         <div className='text-center'>
-          <p className='mb-4 text-brand-red'>{error || t.menuLoadFailed}</p>
+          {/* The server's own message is English and not for guests. */}
+          <p className='mb-4 text-brand-red'>{t.menuLoadFailed}</p>
           <button onClick={() => window.location.reload()} className='rounded-lg bg-primary px-6 py-2 font-medium text-selected-text'>
             {t.retry ?? 'Retry'}
           </button>
@@ -177,9 +165,9 @@ export default function HomeScreen() {
         onRequireAddress={() => setAddressOpen(true)}
         onOpenInfo={() => setInfoOpen(true)}
         onOpenPreorder={() => setPreorderOpen(true)}
-        preorderLabel={scheduledSlot?.label}
+        preorderLabel={preorderLabel}
       />
-      <CategoryNavBar categories={productsByCategory} activeCategory={activeCategory} onCategoryClick={setActiveCategory} query={query} onQueryChange={setQuery} />
+      <CategoryNavBar categories={productsByCategory} activeCategory={shownCategory} onCategoryClick={setActiveCategory} query={query} onQueryChange={setQuery} />
 
       <main id='menu-main' className='shell shell-pad pb-28 pt-6 lg:pb-20' role='main'>
         {error && (
@@ -197,13 +185,13 @@ export default function HomeScreen() {
           </div>
         )}
 
-        {prunedCount > 0 && (
+        {(lastReconcile?.removed ?? 0) > 0 && (
           <div className='anim-fade mb-5 flex items-center gap-3 rounded-2xl border border-[rgba(255,138,94,0.35)] bg-[rgba(255,138,94,0.1)] px-4 py-3.5'>
             <AlertCircle className='h-5 w-5 shrink-0 text-warning' />
             <div className='min-w-0 flex-1 text-[13.5px] font-semibold text-white'>
               {t.cartItemsRemoved ?? 'Some items are no longer available and were removed from your cart.'}
             </div>
-            <button onClick={() => setPrunedCount(0)} aria-label={t.close} className='shrink-0 rounded-full p-1.5 text-muted-foreground transition hover:text-white'>
+            <button onClick={dismissReconcileNotice} aria-label={t.close} className='shrink-0 rounded-full p-1.5 text-muted-foreground transition hover:text-white'>
               <X className='h-4 w-4' />
             </button>
           </div>
@@ -280,7 +268,6 @@ export default function HomeScreen() {
         open={preorderOpen}
         onClose={() => setPreorderOpen(false)}
         onConfirm={(slot) => {
-          setScheduledSlot(slot);
           // Persisted so the checkout route picks it up after navigation.
           savePreorderSlot(storeInfo?.slug || 'default', slot);
         }}

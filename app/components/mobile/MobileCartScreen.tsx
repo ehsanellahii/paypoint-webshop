@@ -15,13 +15,15 @@ import MobileShell from "~/components/mobile/MobileShell";
 import SwipeToRemove from '~/components/ui/SwipeToRemove';
 import SmartImage from '~/lib/SmartImage';
 import { fetchCartRecommendations, formatPrice } from "~/lib/api";
-import { cn, getImageURL, getPostalRateInfo, type MenuProduct } from "~/lib/utils";
+import { cn, getImageURL, type MenuProduct } from "~/lib/utils";
 import { useCart } from "~/contexts/cart-context";
 import { useAddress } from "~/contexts/address-context";
 import { useStore } from "~/contexts/store-context";
 import { useLanguage } from "~/contexts/language-context";
 import { useStoreNavigation } from "~/hooks/useStoreNavigation";
 import { useOrderingWindow } from "~/hooks/useOrderingWindow";
+import { isSoldOut, requiresConfiguration } from "~/lib/productConfig";
+import { cartLineTotal } from "~/lib/utils";
 
 /**
  * Cart as a full screen (mobile). The desktop equivalent is a dialog; both read
@@ -42,7 +44,7 @@ export default function MobileCartScreen() {
     orderMessage,
     setOrderMessage,
   } = useCart();
-  const { orderType, deliveryAddress } = useAddress();
+  const { orderType, deliveryRate } = useAddress();
   const { toMenu, toCheckout, toProduct, back } = useStoreNavigation();
   // Closed shop, no pre-order slot: there is nothing to check out into.
   const { orderingClosed } = useOrderingWindow();
@@ -62,7 +64,7 @@ export default function MobileCartScreen() {
     if (!storeInfo?.adminId || !storeInfo?.storeId) return;
     let cancelled = false;
     fetchCartRecommendations(storeInfo.adminId, storeInfo.storeId, storeInfo.apiKey, cartKey ? cartKey.split(',') : [], 4).then((res) => {
-      if (!cancelled) setRecs(res.filter((p) => !cart.some((c) => c.product.id === p.id)).slice(0, 4));
+      if (!cancelled) setRecs(res.filter((p) => !isSoldOut(p) && !cart.some((c) => c.product.id === p.id)).slice(0, 4));
     });
     return () => {
       cancelled = true;
@@ -74,10 +76,9 @@ export default function MobileCartScreen() {
   const [noteDraft, setNoteDraft] = useState("");
 
   const isDelivery = orderType === "delivery" && !storeInfo?.tableInfo?.token;
-  const rate = getPostalRateInfo(
-    Number(deliveryAddress?.postalCode || 0),
-    storeInfo?.postalRates || [],
-  );
+  // The server's delivery terms for this address (address context), the
+  // same figures checkout charges.
+  const rate = deliveryRate;
   const deliveryFee = isDelivery ? (rate.deliveryCharges ?? 0) : 0;
   const total = totalPrice - discountAmount + deliveryFee;
   const logoURL = storeInfo?.settings?.logo || "";
@@ -271,7 +272,7 @@ export default function MobileCartScreen() {
                         </div>
                       )}
                       <div className="mt-[3px] text-[12.5px] font-extrabold text-white">
-                        {formatPrice(item.product.currentPrice * item.quantity)}
+                        {formatPrice(cartLineTotal(item))}
                       </div>
                     </div>
 
@@ -331,7 +332,10 @@ export default function MobileCartScreen() {
                           />
                           {/* The design notches this button into the corner rather than floating it. */}
                           <button
-                            onClick={() => addToCart(p, 1, {})}
+                            onClick={() =>
+                              // A size or a required option to choose: the product screen, not a quick add.
+                              requiresConfiguration(p) ? toProduct(String(p.id)) : addToCart(p, 1, {})
+                            }
                             aria-label={t.addToCart ?? 'Add'}
                             className="absolute -right-px -top-px flex h-[35px] w-[38px] items-start justify-end rounded-bl-[18px] rounded-tr-[17px] bg-surface-1 pr-[7px] pt-1.5 text-white transition active:scale-90"
                           >

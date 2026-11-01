@@ -46,6 +46,7 @@ export async function toggleFavorite({
   storeId,
   apiKey,
   customerId,
+  authToken,
   slug,
   snapshot,
 }: {
@@ -54,11 +55,15 @@ export async function toggleFavorite({
   /** Tenant key from the store payload; see `apiHeaders`. */
   apiKey?: string;
   customerId?: string;
+  /** The signed-in customer's token — the favourites routes need it (server 0051). */
+  authToken?: string;
   slug: string;
   snapshot: Omit<FavoriteSnapshot, 'addedAt'> & { productId: string };
 }): Promise<{
   isNowFavorite: boolean;
   favorites: FavoriteSnapshot[];
+  /** The server refused the token: the caller should sign the customer out. */
+  authExpired?: boolean;
 }> {
   const state = readState();
   const current = state.byStore[slug] ?? [];
@@ -78,18 +83,19 @@ export async function toggleFavorite({
 
   writeState(next);
 
-  // ✅ Sync to backend (only if logged in context exists)
-  const shouldSync = !!adminId && !!storeId && !!customerId;
+  // Sync to the backend, only for a signed-in customer with a token.
+  const shouldSync = !!adminId && !!storeId && !!customerId && !!authToken;
+  let authExpired = false;
 
   if (shouldSync) {
     const nextIds = nextList.map((x) => x.productId);
 
     try {
       // merge adds missing (good for "add", doesn't remove on "remove")
-      await mergeFavorites(adminId!, storeId!, apiKey ?? '', customerId!, nextIds);
-    } catch (e) {
+      await mergeFavorites(adminId!, storeId!, apiKey ?? '', customerId!, nextIds, authToken);
+    } catch (e: any) {
       // Don't break UX if network fails; local state stays
-      console.error('Favorites sync failed:', e);
+      authExpired = (e?.status === 401 && e?.code !== 'INVALID_API_KEY') || (e?.status === 403 && e?.code === 'FORBIDDEN');
     }
   }
 
@@ -98,7 +104,7 @@ export async function toggleFavorite({
     window.dispatchEvent(new Event('favorites:changed'));
   }
 
-  return { isNowFavorite: !exists, favorites: nextList };
+  return { isNowFavorite: !exists, favorites: nextList, authExpired };
 }
 
 export function clearFavorites(storeKey: string) {
