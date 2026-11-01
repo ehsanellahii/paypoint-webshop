@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useMemo, useState, ReactNode, startTransition, useCallback } from 'react';
+import { isGermanAddress } from '~/lib/addressSearch';
 
 export type OrderType = 'pickup' | 'delivery' | 'dineIn';
 
@@ -16,7 +17,10 @@ export type DeliveryAddress = {
 
   locality?: string;
   adminArea?: string;
+  /** Google's long name, in the browser's language ("Deutschland", "Germany"). */
   country?: string;
+  /** Two-letter code ("DE"). Missing on addresses saved before 1 Nov 2026. */
+  countryCode?: string;
 };
 
 /** A delivery address the customer chose to keep, optionally tagged "Home"/"Work". */
@@ -97,10 +101,18 @@ export function AddressProvider({ children, storeKey }: { children: ReactNode; s
 
   useEffect(() => {
     const stored = getStoredState(storageKey);
+    /*
+     * The shop delivers in Germany only. Before 1 Nov 2026 the address search
+     * also offered foreign addresses, and one picked then would still be loaded
+     * here — and checkout only compares postcodes, where a US ZIP like 10115
+     * looks like Berlin. So foreign entries are dropped on load.
+     */
+    const active = stored.deliveryAddress && isGermanAddress(stored.deliveryAddress) ? stored.deliveryAddress : null;
+    const book = Array.isArray(stored.savedAddresses) ? stored.savedAddresses.filter((a) => isGermanAddress(a)) : [];
     startTransition(() => {
       setOrderTypeState(stored.orderType ?? 'pickup');
-      setDeliveryAddressState(stored.deliveryAddress ?? null);
-      setSavedAddresses(stored.savedAddresses ?? []);
+      setDeliveryAddressState(active);
+      setSavedAddresses(book);
       setIsHydrated(true);
     });
   }, [storageKey]);

@@ -11,6 +11,7 @@ import { useLanguage } from '~/contexts/language-context';
 import { cn } from '~/lib/utils';
 import { getStoreCover } from '~/lib/storeMedia';
 import { checkDeliveryZone, formatPrice } from '@/lib/api';
+import { addressGeocodeRequest, addressPredictionRequest, countryCodeOf, isGermanAddress } from '~/lib/addressSearch';
 
 function parseAddress(place: google.maps.places.PlaceResult | google.maps.GeocoderResult): DeliveryAddress {
   const comps = place.address_components ?? [];
@@ -28,6 +29,7 @@ function parseAddress(place: google.maps.places.PlaceResult | google.maps.Geocod
     locality: get('locality') ?? get('postal_town'),
     adminArea: get('administrative_area_level_1'),
     country: get('country'),
+    countryCode: countryCodeOf(comps),
   };
 }
 
@@ -117,7 +119,7 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
         }
         setLoading(true);
         const svc = new google.maps.places.AutocompleteService();
-        svc.getPlacePredictions({ input: q, types: ['address'] }, (res, status) => {
+        svc.getPlacePredictions(addressPredictionRequest(q, storeInfo?.coordinates), (res, status) => {
           setLoading(false);
           if (isKeyRefused(status)) setLookupError(MAPS_AUTH_ERROR);
           setPredictions(status === google.maps.places.PlacesServiceStatus.OK && res ? res : []);
@@ -126,7 +128,7 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
       q.length < 3 ? 0 : 250,
     );
     return () => window.clearTimeout(handle);
-  }, [query, loaded]);
+  }, [query, loaded, storeInfo?.coordinates]);
 
   /*
    * The delivery area is decided by the server, against the postal code.
@@ -154,6 +156,17 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
 
     setChecking(true);
     try {
+      /*
+       * Outside Germany is outside every delivery area. The suggestions and the
+       * typed check are limited to Germany already, but "use my location" is
+       * not (Google ignores the country filter there), and a store without any
+       * zones would otherwise say yes to it.
+       */
+      if (!isGermanAddress(address)) {
+        setResult({ status: 'no', address });
+        return;
+      }
+
       /*
        * No postcode on the resolved address means there is nothing to ask
        * about. Left undecided rather than refused: an imprecise Google pick —
@@ -245,7 +258,7 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
     if (typed.length <= MIN_QUERY || checking || !loaded) return;
     setChecking(true);
     const geocoder = new google.maps.Geocoder();
-    geocoder.geocode({ address: typed }, (results, status) => {
+    geocoder.geocode(addressGeocodeRequest(typed, storeInfo?.coordinates), (results, status) => {
       if (isKeyRefused(status)) setLookupError(MAPS_AUTH_ERROR);
       /*
        * Only decide when we actually resolved an address. A geocode that finds
@@ -253,9 +266,19 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
        * area" there would turn a typo into a lost order.
        */
       if (status === 'OK' && results && results[0]) {
+        const addr = parseAddress(results[0]);
+        /*
+         * Show what Google made of the typing, as after picking a suggestion —
+         * "Müllerstr 142" could have landed in another town, and the guest has
+         * to be able to see that before trusting a "no".
+         */
+        if (addr.formattedAddress) {
+          autofilled.current = addr.formattedAddress;
+          setQuery(addr.formattedAddress);
+        }
         // checkAddress owns the flag from here, so the button does not blink
         // between the geocode and the zone lookup.
-        void checkAddress(parseAddress(results[0]));
+        void checkAddress(addr);
         return;
       }
       setChecking(false);

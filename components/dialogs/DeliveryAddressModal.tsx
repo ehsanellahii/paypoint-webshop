@@ -10,6 +10,7 @@ import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
 import { useAddress, type DeliveryAddress } from '~/contexts/address-context';
 import { useIsMobile } from '~/contexts/device-context';
+import { addressPredictionRequest, countryCodeOf, isGermanAddress } from '~/lib/addressSearch';
 import MobileSheet from '~/components/mobile/MobileSheet';
 
 type AddressParts = {
@@ -24,6 +25,7 @@ type AddressParts = {
   locality?: string; // city
   adminArea?: string; // state/region
   country?: string;
+  countryCode?: string; // "DE"
 
   // Useful for backend
   raw?: google.maps.places.PlaceResult;
@@ -55,6 +57,7 @@ function parseAddress(place: google.maps.places.PlaceResult): AddressParts {
     locality: get('locality') ?? get('postal_town'),
     adminArea: get('administrative_area_level_1'),
     country: get('country'),
+    countryCode: countryCodeOf(comps),
     raw: place,
   };
 }
@@ -105,6 +108,13 @@ export default function DeliveryAddressModal({ open, onClose, onSelect, googleAp
   // An address chosen from the suggestions but not yet confirmed with "Save".
   const [picked, setPicked] = useState<AddressParts | null>(null);
   const [label, setLabel] = useState<string | undefined>(undefined);
+  /*
+   * The query value we filled in ourselves after a pick. The lookup effect
+   * keys on `query`, so without this it searched again for the address just
+   * chosen (one more paid request) and re-opened the list on top of the
+   * "Save as" chips. Cleared as soon as the customer types again.
+   */
+  const autofilled = useRef<string | null>(null);
 
   const { loaded, error } = useGoogleMaps(googleApiKey);
   const canUseGoogle = loaded;
@@ -136,6 +146,22 @@ export default function DeliveryAddressModal({ open, onClose, onSelect, googleAp
       lat: picked.lat,
       lng: picked.lng,
     });
+
+    // Outside Germany is outside every delivery area — also for a store that
+    // has no zones set, where the server would say yes to any postcode.
+    if (!isGermanAddress(picked)) {
+      setZone({
+        isAvailable: false,
+        hasZones: true,
+        postalCode: postalCode ?? '',
+        deliveryCharges: null,
+        minimumOrderAmount: null,
+        deliveryTime: null,
+        priorityDeliveryCharges: null,
+        priorityDeliveryTime: null,
+      });
+      return;
+    }
 
     // Google gave no postcode for this pick, so there is nothing to ask about.
     // Treated as unknown rather than rejected: the address itself is still
@@ -181,6 +207,7 @@ export default function DeliveryAddressModal({ open, onClose, onSelect, googleAp
   const outOfZone = !!picked && !!zone && !zone.isAvailable;
 
   const resetForm = () => {
+    autofilled.current = null;
     setQuery('');
     setPredictions([]);
     setTypingError('');
@@ -211,6 +238,12 @@ export default function DeliveryAddressModal({ open, onClose, onSelect, googleAp
       return;
     }
 
+    // Already resolved by a pick — nothing to look up, and the list stays shut.
+    if (autofilled.current !== null && autofilled.current === query) {
+      setPredictions((prev) => (prev.length ? [] : prev));
+      return;
+    }
+
     const q = query.trim();
     setSelectionError('');
 
@@ -232,7 +265,7 @@ export default function DeliveryAddressModal({ open, onClose, onSelect, googleAp
 
     const handle = window.setTimeout(() => {
       setLoading(true);
-      svc.getPlacePredictions({ input: q, types: ['address'] }, (res, status) => {
+      svc.getPlacePredictions(addressPredictionRequest(q, storeInfo?.coordinates), (res, status) => {
         setLoading(false);
         // A refused key answers every request the same way; say so rather than
         // showing an empty dropdown that looks like "no such address".
@@ -292,6 +325,7 @@ export default function DeliveryAddressModal({ open, onClose, onSelect, googleAp
       // it falls outside the delivery area before anything is saved.
       setPicked(parsed);
       setPredictions([]);
+      autofilled.current = parsed.formattedAddress;
       setQuery(parsed.formattedAddress);
       setTypingError('');
     });
@@ -416,6 +450,7 @@ export default function DeliveryAddressModal({ open, onClose, onSelect, googleAp
               aria-label={t.deliveryAddress}
               value={query}
               onChange={(e) => {
+                autofilled.current = null;
                 setQuery(e.target.value);
                 setPicked(null);
               }}
