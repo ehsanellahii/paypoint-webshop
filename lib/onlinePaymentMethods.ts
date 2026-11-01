@@ -71,6 +71,9 @@ export function isOnlineMethodShown(
   },
 ): boolean {
   if (!canPayOnline) return false;
+  // PayPal never works on PayPoint's direct charges, so it is never offered,
+  // not even by an older server that sends no flags.
+  if (id === 'paypal') return false;
   if (flags && !flags[FLAG_OF[id]]) return false;
   if (wallets && (id === 'applePay' || id === 'googlePay')) return !!wallets[id];
   return true;

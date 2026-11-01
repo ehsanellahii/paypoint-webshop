@@ -95,13 +95,6 @@ const CashMark = () => (
 
 const EcMark = () => <span className='text-[11px] font-black tracking-[0.03em] text-[#004a93]'>EC</span>;
 
-const PaypalMark = () => (
-  <span className='text-[10.5px] font-black italic'>
-    <span className='text-[#003087]'>Pay</span>
-    <span className='text-[#009cde]'>Pal</span>
-  </span>
-);
-
 const KlarnaMark = () => <span className='text-[10px] font-extrabold tracking-[-0.01em] text-[#0a0b09]'>Klarna.</span>;
 
 /* ------------------------------------------------------------------ registry */
@@ -118,7 +111,8 @@ type MethodSpec = {
 
 /*
  * Order matters: the design lists the other-methods group as
- * Apple Pay, cash, EC/girocard, PayPal, Klarna.
+ * Apple Pay, cash, EC/girocard, Klarna. PayPal has no row: Stripe has no
+ * PayPal for direct charges on the restaurant's account.
  */
 const METHODS: MethodSpec[] = [
   { id: 'cardWallets', method: 'cardWallets', mark: <CardsMark />, tileClass: 'bg-white', group: 'cards' },
@@ -126,7 +120,6 @@ const METHODS: MethodSpec[] = [
   { id: 'googlePay', method: 'googlePay', mark: <GooglePayMark />, tileClass: 'bg-white', group: 'cards' },
   { id: 'cash', method: 'cash', mark: <CashMark />, tileClass: 'bg-white', group: 'other' },
   { id: 'card', method: 'card', mark: <EcMark />, tileClass: 'bg-white', group: 'other' },
-  { id: 'paypal', method: 'paypal', mark: <PaypalMark />, tileClass: 'bg-white', group: 'other' },
   { id: 'klarna', method: 'klarna', mark: <KlarnaMark />, tileClass: 'bg-[#ffb3c7]', group: 'other' },
 ];
 
