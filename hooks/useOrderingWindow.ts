@@ -74,13 +74,29 @@ export function useOrderingWindow() {
   const check = stored ? checkPreorderSlot(storeInfo?.timings, stored) : null;
   const stale = check === 'past' || check === 'invalid';
 
-  // A passed slot is dropped for good, so no screen can send it.
-  useEffect(() => {
-    if (stale) clearPreorderSlot(slug);
-  }, [stale, slug]);
-
   const storeClosed = !isRestaurantOpen(storeInfo?.timings);
   const slotValid = check === 'ok';
+
+  // A passed slot is dropped for good, so no screen can send it. Remembered
+  // first (see `passedSlots`), so a closed shop can still say why it went.
+  useEffect(() => {
+    if (!stale) return;
+    if (check === 'past' && stored) passedSlots.set(slug, stored);
+    clearPreorderSlot(slug);
+  }, [stale, check, stored, slug]);
+
+  // A new slot, or the kitchen open again: the passed one no longer matters.
+  useEffect(() => {
+    if ((stored && !stale) || !storeClosed) passedSlots.delete(slug);
+  }, [stored, stale, storeClosed, slug]);
+
+  /*
+   * The slot passed while the shop is closed. With the shop open a passed slot
+   * simply becomes "as soon as possible"; closed, there is no "now" to fall
+   * back to, so the cart says the time is gone instead of only "closed".
+   * Includes the render before the drop, so the cart does not flicker.
+   */
+  const slotPassed = storeClosed && !slotValid && (check === 'past' || passedSlots.has(slug));
 
   return {
     /** The shop's own state, regardless of what is in the basket. */
@@ -90,11 +106,29 @@ export function useOrderingWindow() {
      * and is being dropped). May still be outside the hours: see `slotOutsideHours`.
      */
     slot: stale ? null : stored,
+    /** The check of `slot`: 'ok', 'closed' (outside the hours), or null without a slot. */
+    slotCheck: stale ? null : check,
     /** A valid future pre-order slot is chosen, so "closed right now" does not apply. */
     hasPreorderSlot: slotValid,
     /** The chosen slot is in the future but outside the opening hours of its date (hours changed since). */
     slotOutsideHours: check === 'closed',
+    /** A chosen slot has passed (and was dropped) while the shop is closed: a new time is needed. */
+    slotPassed,
     /** Nothing can be ordered: no kitchen now, and no valid slot to cook for. */
     orderingClosed: storeClosed && !slotValid,
   };
+}
+
+/**
+ * Slots this tab dropped because they had passed, per store, until a new slot
+ * is chosen or the shop opens. Module-wide rather than per hook, because the
+ * hook instance that drops the slot (the menu) is rarely the one that has to
+ * explain it (the cart, opened later). The drop notifies every instance, so
+ * they all re-render and read it.
+ */
+const passedSlots = new Map<string, PreorderSlot>();
+
+/** Forget a passed slot, once the guest has chosen what to do about it. */
+export function forgetPassedSlot(slug: string) {
+  passedSlots.delete(slug);
 }

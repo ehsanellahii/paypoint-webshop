@@ -11,6 +11,9 @@ import { DeviceProvider } from '~/contexts/device-context';
 import { getStoreBase } from '~/lib/storeBase';
 import { FALLBACK_ICONS } from '~/lib/metadata';
 import { StoreBaseProvider } from '~/contexts/store-base-context';
+import { notFound } from 'next/navigation';
+import { getStoreData } from '~/lib/api';
+import { BLOCKEDSLUGS } from './page';
 
 const inter = Inter({
   variable: '--font-inter',
@@ -89,6 +92,25 @@ export const viewport: Viewport = {
 
 export default async function RootLayout({ children, params }: { children: React.ReactNode; params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+  /*
+   * A slug that names no store is a 404 — decided here, before anything is
+   * sent. The page's own check came too late: `loading.tsx` has already
+   * streamed the skeleton with a 200 by the time the page finds out, so an
+   * unknown address answered "200 OK" with a not-found screen in it (a soft
+   * 404 to search engines). Same call and arguments as the page makes, so
+   * React's per-request cache serves the page from this fetch.
+   *
+   * A backend fault is not a missing store: it is left to the page, whose
+   * error boundary says so in German instead of a 404.
+   */
+  if (BLOCKEDSLUGS.has(slug)) notFound();
+  let storeExists = true;
+  try {
+    storeExists = !!(await getStoreData(slug, undefined));
+  } catch {
+    storeExists = true;
+  }
+  if (!storeExists) notFound();
   // Decided in proxy.ts from the User-Agent (or ?view=). Stamped on <html>
   // so the mobile palette in globals.css can scope to it, and passed through
   // context so client components can pick their tree.
@@ -97,7 +119,8 @@ export default async function RootLayout({ children, params }: { children: React
   // redirect the app emits hangs off this; routing is already decided.
   const storeBase = await getStoreBase(slug);
   return (
-    <html lang='en' className='dark' data-device={device}>
+    // German by default, as the shop is; LanguageProvider updates it when a guest switches.
+    <html lang='de' className='dark' data-device={device}>
       {/*
        * No hand-written <head>: Next builds it from the Metadata API, so the
        * icons and colour scheme are declared as `metadata` and `viewport`

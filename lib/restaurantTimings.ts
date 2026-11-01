@@ -17,7 +17,9 @@
  *    entry, which may well be unset.
  */
 
-import { addDays, berlinClockAt, berlinInstant, dayKeyOf, hhmmToMinutes, isHHMM, isIsoDate, minutesToHHMM, weekdayOfDate } from './berlinTime';
+import { addDays, berlinClockAt, berlinInstant, dayKeyOf, daysBetween, hhmmToMinutes, isHHMM, isIsoDate, minutesToHHMM, weekdayOfDate } from './berlinTime';
+import type { Translations } from './i18n';
+import type { IStoreInfo } from './types';
 
 /**
  * One weekday's hours, as the server stores them (timings.model.ts).
@@ -226,6 +228,49 @@ export function isSlotWithinOpeningHours(timings: WeeklyHours, date: string, tim
   if (!isIsoDate(date) || !isHHMM(time)) return false;
   const minutes = hhmmToMinutes(time);
   return isOpenAtBerlinClock(timings, weekdayOfDate(date), minutes);
+}
+
+/**
+ * When a closed store opens next, judged in Berlin time.
+ *
+ * `dayOffset` is 0 for later today, 1 for tomorrow and so on, up to 7 (the
+ * same weekday next week, when that is the only open day and today's window
+ * has already passed). Null while the store is open, and when no day of the
+ * week has opening hours at all.
+ *
+ * Built on `nextOpeningAt`, so it reads every window of a day: between the
+ * lunch and dinner window of a split day it names today's dinner opening (not
+ * tomorrow's lunch), and a day ticked `closed` is skipped.
+ */
+export function nextOpening(timings: WeeklyHours, at: Date = new Date()): { dayOffset: number; dayIndex: number; time: string } | null {
+  if (!timings) return null;
+  const { dayIndex, minutes } = berlinClock(at);
+  if (activeWindowAt(timings, dayIndex, minutes)) return null;
+  const opens = nextOpeningAt(timings, at);
+  if (opens === null) return null;
+  const then = berlinClockAt(opens);
+  return { dayOffset: daysBetween(berlinClockAt(at).date, then.date), dayIndex: then.dayIndex, time: minutesToHHMM(then.minutes) };
+}
+
+/** Translation keys of the weekdays, Sunday first like the timings' day index. */
+export const WEEKDAY_KEYS = ['weekdaySunday', 'weekdayMonday', 'weekdayTuesday', 'weekdayWednesday', 'weekdayThursday', 'weekdayFriday', 'weekdaySaturday'] as const;
+
+/** The slice of the translations `nextOpeningLabel` reads. */
+type OpeningLabels = Pick<Translations, 'opensTodayAt' | 'opensTomorrowAt' | 'opensOnDayAt' | (typeof WEEKDAY_KEYS)[number]>;
+
+/**
+ * "Öffnet heute um 23:00" / "Öffnet morgen um 11:00" / "Öffnet Montag um 11:00"
+ * for a closed store, or null when it is open or has no hours set.
+ *
+ * Shared by the closed menu header and the mobile restaurant-info sheet, so the
+ * two cannot name different times.
+ */
+export function nextOpeningLabel(storeInfo: { timings?: WeeklyHours | IStoreInfo['timings'] } | null | undefined, t: OpeningLabels, at: Date = new Date()): string | null {
+  const next = nextOpening(storeInfo?.timings as WeeklyHours, at);
+  if (!next) return null;
+  if (next.dayOffset === 0) return t.opensTodayAt.replace('{time}', next.time);
+  if (next.dayOffset === 1) return t.opensTomorrowAt.replace('{time}', next.time);
+  return t.opensOnDayAt.replace('{day}', t[WEEKDAY_KEYS[next.dayIndex]]).replace('{time}', next.time);
 }
 
 export { getTodayTimings, isRestaurantOpen };

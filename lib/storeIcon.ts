@@ -158,15 +158,27 @@ export async function iconResponse(slug: string | null, size: number): Promise<R
 export async function manifestResponse(slug: string, base: string): Promise<Response> {
   const store = await storeFor(slug);
   const name = store?.brandName?.trim() || 'Online Ordering';
-  const theme = store?.settings?.themeColors?.primaryColor || '#ffffff';
+  /*
+   * The installed shop opens on the mobile design's page colour
+   * (`--background` under `[data-device='mobile']`, globals.css), so the splash
+   * screen and the status bar match the dark app instead of flashing white.
+   * The store accent stays out: Pizza M&M's is white.
+   */
+  const pageColour = '#0c0f1c';
+  /*
+   * `start_url` must lie inside `scope`. "/pizza-mandm" is not inside
+   * "/pizza-mandm/" (scope is a plain prefix, and the shop's own URLs carry no
+   * trailing slash — Next redirects "/pizza-mandm/" away), so the scope is
+   * the store base itself. On the restaurant's own domain both are "/".
+   */
   const manifest = {
     name,
     short_name: name.length > 12 ? name.slice(0, 12).trim() : name,
     start_url: base || '/',
-    scope: `${base}/`,
+    scope: base || '/',
     display: 'standalone',
-    background_color: '#ffffff',
-    theme_color: theme,
+    background_color: pageColour,
+    theme_color: pageColour,
     icons: [
       { src: `${base}/icon-192.png`, sizes: '192x192', type: 'image/png', purpose: 'any' },
       { src: `${base}/icon-512.png`, sizes: '512x512', type: 'image/png', purpose: 'any' },

@@ -9,6 +9,7 @@ import { formatPrice } from '@/lib/api';
 import { cn, formatEtaRange } from '~/lib/utils';
 import { berlinClockAt } from '~/lib/berlinTime';
 import { dayHoursText } from '~/lib/restaurantTimings';
+import { formatStoreAddress } from '~/lib/storeAddress';
 
 type Props = { open: boolean; onClose: () => void };
 
@@ -21,17 +22,48 @@ const DAY_LABELS: Record<'de' | 'en', Record<string, string>> = {
   en: { monday: 'Monday', tuesday: 'Tuesday', wednesday: 'Wednesday', thursday: 'Thursday', friday: 'Friday', saturday: 'Saturday', sunday: 'Sunday' },
 };
 
+/**
+ * Whether to mark values the backend never supplied. Only while developing:
+ * the markers ("KÜCHEN-TAGS FEHLT") are notes for whoever fills in the store
+ * record, and guests on the live shop used to see them. In production the
+ * row is simply left out.
+ */
+const SHOW_MISSING = process.env.NODE_ENV !== 'production';
+
+/**
+ * Marks a value the backend never supplied, so an incomplete store record is
+ * obvious during development rather than showing as a silently absent line.
+ * Declared at module level — a component created during render remounts on
+ * every render (react-hooks/static-components).
+ */
+function Missing({ label, compact }: { label: string; compact?: boolean }) {
+  const { t } = useLanguage();
+  if (!SHOW_MISSING) return null;
+  return (
+    <span
+      title={`${label}: ${t.notProvided}`}
+      className={cn(
+        'inline-flex items-center gap-1 rounded-md border border-dashed border-warning/60 text-[11px] font-bold uppercase tracking-[0.03em] text-warning',
+        compact ? 'px-1 py-0.5' : 'px-1.5 py-[3px]',
+      )}>
+      <AlertTriangle className='h-3 w-3 shrink-0' strokeWidth={2.2} />
+      {compact ? '' : `${label} ${t.notProvided}`}
+    </span>
+  );
+}
+
 export default function RestaurantInfoModal({ open, onClose }: Props) {
   const { t, language } = useLanguage();
   const storeInfo = useStore();
-  const { deliveryRate } = useAddress();
+  const { deliveryRate, orderType } = useAddress();
   const timings = (storeInfo?.timings as Record<string, { open: string; close: string }> | null | undefined) || {};
   const labels = DAY_LABELS[language === 'de' ? 'de' : 'en'];
   // Today in Berlin, where the store is — not on the device's own calendar.
   const todayKey = DAY_ORDER[(berlinClockAt().dayIndex + 6) % 7]; // 0=Sun → shift to Mon-first
 
   const rows = DAY_ORDER.filter((k) => timings[k]?.open && timings[k]?.close);
-  const address = [storeInfo?.address, storeInfo?.postalCode, storeInfo?.city].filter(Boolean).join(', ');
+  // "Adalbertstraße 36, 10179 Berlin" — not the admin's free text joined with postcode and city again.
+  const address = formatStoreAddress(storeInfo);
 
   // The branch line only earns its place when it says something the heading
   // does not — many stores name the branch after the firm.
@@ -53,26 +85,11 @@ export default function RestaurantInfoModal({ open, onClose }: Props) {
   // "Burritos · Nachos · Quesadillas · €€"
   const cuisine = [...(storeInfo?.cuisineTags ?? []), storeInfo?.priceLevel].filter(Boolean).join(' · ');
 
-  /**
-   * Marks a value the backend never supplied, so an incomplete store record is
-   * obvious in the UI rather than showing as a silently absent line.
-   *
-   * These are visible to customers — they are meant to be, while the data is
-   * being filled in. Gate on NODE_ENV once every store is complete.
-   */
-  function Missing({ label, compact }: { label: string; compact?: boolean }) {
-    return (
-      <span
-        title={`${label}: ${t.notProvided}`}
-        className={cn(
-          'inline-flex items-center gap-1 rounded-md border border-dashed border-warning/60 text-[11px] font-bold uppercase tracking-[0.03em] text-warning',
-          compact ? 'px-1 py-0.5' : 'px-1.5 py-[3px]',
-        )}>
-        <AlertTriangle className='h-3 w-3 shrink-0' strokeWidth={2.2} />
-        {compact ? '' : `${label} ${t.notProvided}`}
-      </span>
-    );
-  }
+  // The minimum order applies to delivery; for pickup it is not a figure the guest has to meet.
+  const isDelivery = orderType === 'delivery';
+  const showEta = !!eta || SHOW_MISSING;
+  const showMin = isDelivery && (rate.minimumOrderAmount != null || SHOW_MISSING);
+  const subtitle = cuisine || branch;
 
   return (
     <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
@@ -93,37 +110,45 @@ export default function RestaurantInfoModal({ open, onClose }: Props) {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={logo} alt={name} className='h-[52px] w-[52px] shrink-0 rounded-[13px] object-cover' />
                 ) : (
-                  <span className='flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[13px] bg-surface-3'>
-                    <Missing label={t.fieldLogo} compact />
-                  </span>
+                  SHOW_MISSING && (
+                    <span className='flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[13px] bg-surface-3'>
+                      <Missing label={t.fieldLogo} compact />
+                    </span>
+                  )
                 )}
                 <div className='min-w-0'>
                   <Dialog.Title className='truncate text-[21px] font-black leading-tight tracking-[-0.02em]'>{name}</Dialog.Title>
-                  <div className='mt-1 truncate text-[13px] font-semibold text-muted-foreground'>
-                    {cuisine || branch || <Missing label={t.fieldCuisine} />}
-                  </div>
+                  {(subtitle || SHOW_MISSING) && (
+                    <div className='mt-1 truncate text-[13px] font-semibold text-muted-foreground'>{subtitle || <Missing label={t.fieldCuisine} />}</div>
+                  )}
                 </div>
               </div>
 
-              {/* Meta row */}
-              <div className='mt-4 flex flex-wrap items-center gap-x-2.5 gap-y-2 text-[13.5px] font-semibold text-fg-secondary'>
-                <span>
-                  {t.deliveryTime ?? 'Delivery time'}{' '}
-                  {eta ? <span className='font-bold text-white'>{eta} Min.</span> : <Missing label={t.fieldDeliveryTime} />}
-                </span>
-                <span className='opacity-35'>·</span>
-                <span>
-                  {t.minimumOrderValue ?? 'MOV'}{' '}
-                  {rate.minimumOrderAmount != null ? (
-                    <span className='font-bold text-white'>{formatPrice(rate.minimumOrderAmount)}</span>
-                  ) : (
-                    <Missing label={t.fieldMinimumOrder} />
+              {/* Meta row — only the figures that are known (and, for the minimum, that apply). */}
+              {(showEta || showMin) && (
+                <div className='mt-4 flex flex-wrap items-center gap-x-2.5 gap-y-2 text-[13.5px] font-semibold text-fg-secondary'>
+                  {showEta && (
+                    <span>
+                      {t.deliveryTime ?? 'Delivery time'}{' '}
+                      {eta ? <span className='font-bold text-white'>{eta} Min.</span> : <Missing label={t.fieldDeliveryTime} />}
+                    </span>
                   )}
-                </span>
-              </div>
+                  {showEta && showMin && <span className='opacity-35'>·</span>}
+                  {showMin && (
+                    <span>
+                      {t.minimumOrderValue ?? 'MOV'}{' '}
+                      {rate.minimumOrderAmount != null ? (
+                        <span className='font-bold text-white'>{formatPrice(rate.minimumOrderAmount)}</span>
+                      ) : (
+                        <Missing label={t.fieldMinimumOrder} />
+                      )}
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Opening hours */}
-              <h3 className='mb-3 mt-7 text-base font-extrabold'>{t.openingHours ?? 'Opening hours'}</h3>
+              {(rows.length > 0 || SHOW_MISSING) && <h3 className='mb-3 mt-7 text-base font-extrabold'>{t.openingHours ?? 'Opening hours'}</h3>}
               {rows.length > 0 ? (
                 <div className='overflow-hidden rounded-[14px] bg-surface-3'>
                   {rows.map((k, i) => (
@@ -136,20 +161,22 @@ export default function RestaurantInfoModal({ open, onClose }: Props) {
                   ))}
                 </div>
               ) : (
-                <div className='rounded-[14px] bg-surface-3 px-4 py-3'>
-                  <Missing label={t.fieldOpeningHours} />
-                </div>
+                SHOW_MISSING && (
+                  <div className='rounded-[14px] bg-surface-3 px-4 py-3'>
+                    <Missing label={t.fieldOpeningHours} />
+                  </div>
+                )
               )}
 
               {/* Address & contact */}
               <h3 className='mb-3 mt-7 text-base font-extrabold'>{t.addressContact ?? 'Address & contact'}</h3>
               <div className='flex flex-col gap-2.5'>
-                {!address && (
+                {!address && SHOW_MISSING && (
                   <div className='rounded-[14px] bg-surface-3 p-3.5'>
                     <Missing label={t.fieldAddress} />
                   </div>
                 )}
-                {!storeInfo?.phone && (
+                {!storeInfo?.phone && SHOW_MISSING && (
                   <div className='rounded-[14px] bg-surface-3 p-3.5'>
                     <Missing label={t.fieldPhone} />
                   </div>
@@ -189,13 +216,11 @@ export default function RestaurantInfoModal({ open, onClose }: Props) {
               </div>
 
               {/* Closing description, as in the design. */}
-              <p className='mt-6 text-[12.5px] font-medium leading-relaxed text-muted-foreground-2'>
-                {storeInfo?.about ? (
-                  <span className='whitespace-pre-line'>{storeInfo.about}</span>
-                ) : (
-                  <Missing label={t.fieldDescription} />
-                )}
-              </p>
+              {(storeInfo?.about || SHOW_MISSING) && (
+                <p className='mt-6 text-[12.5px] font-medium leading-relaxed text-muted-foreground-2'>
+                  {storeInfo?.about ? <span className='whitespace-pre-line'>{storeInfo.about}</span> : <Missing label={t.fieldDescription} />}
+                </p>
+              )}
             </div>
           </Dialog.Popup>
         </Dialog.Viewport>

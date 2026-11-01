@@ -33,7 +33,7 @@ export default function MenuHeader({ query, onQueryChange, cartCount, subtotal, 
             onClick={onOpenAddress}
             className='flex min-w-0 shrink items-center gap-2.5 rounded-full bg-surface-1 py-0 pl-[5px] pr-4 text-sm font-bold text-white transition hover:bg-elevated sm:shrink-0'
             style={{ height: 44 }}
-            aria-label='Change delivery address'>
+            aria-label={`${t.changeDeliveryAddress}: ${addrShort}`}>
             <span className='flex h-[34px] w-[34px] items-center justify-center rounded-full bg-surface-3'>
               <MapPin className='h-4 w-4' />
             </span>
@@ -49,10 +49,11 @@ export default function MenuHeader({ query, onQueryChange, cartCount, subtotal, 
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
             placeholder={t.searchMenu ?? 'Search the menu…'}
+            aria-label={t.searchMenu}
             className='min-w-0 flex-1 border-none bg-transparent text-sm font-medium text-white outline-none'
           />
           {query && (
-            <button onClick={() => onQueryChange('')} aria-label='Clear search' className='flex h-6 w-6 items-center justify-center rounded-full bg-control text-white transition hover:bg-control-hover'>
+            <button onClick={() => onQueryChange('')} aria-label={t.clearSearch} className='flex h-6 w-6 items-center justify-center rounded-full bg-control text-white transition hover:bg-control-hover'>
               <X className='h-3 w-3' />
             </button>
           )}
@@ -77,7 +78,7 @@ export default function MenuHeader({ query, onQueryChange, cartCount, subtotal, 
         <button
           onClick={onOpenAccount}
           data-cart-anchor='1'
-          aria-label='Open account'
+          aria-label={t.myAccount}
           className='flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] border border-border bg-surface-1 text-white transition hover:border-border-strong hover:bg-elevated'>
           <User className='h-5 w-5' />
         </button>

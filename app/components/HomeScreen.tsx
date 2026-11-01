@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, AlertCircle, X } from 'lucide-react';
+import { Search, AlertCircle, UtensilsCrossed, X } from 'lucide-react';
 import ProductCard from '@/components/ProductCard';
 import ProductModal from '~/components/dialogs/ProductModal';
 import Footer from '@/components/Footer';
@@ -54,6 +54,13 @@ export default function HomeScreen() {
   const [selectedProduct, setSelectedProduct] = useState<MenuProduct | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
+  /*
+   * After a tap on a category the page scrolls smoothly past the sections in
+   * between, and the scroll-spy lit each of them up in turn — and near the end
+   * of the page, where the last sections cannot reach the top, it settled on
+   * the wrong one. The tapped category holds until that scroll has finished.
+   */
+  const spyPausedUntil = useRef(0);
 
   // Centralized shell dialogs
   const [cartOpen, setCartOpen] = useState(false);
@@ -91,6 +98,7 @@ export default function HomeScreen() {
     if (!menuData || q) return;
     const options = { root: null, rootMargin: '-140px 0px -60% 0px', threshold: 0 };
     observerRef.current = new IntersectionObserver((entries) => {
+      if (Date.now() < spyPausedUntil.current) return;
       entries.forEach((entry) => {
         if (entry.isIntersecting) setActiveCategory(entry.target.id.replace('category-', ''));
       });
@@ -99,6 +107,17 @@ export default function HomeScreen() {
     els.forEach((el) => observerRef.current?.observe(el));
     return () => observerRef.current?.disconnect();
   }, [menuData, q]);
+
+  const handleCategoryClick = (id: string) => {
+    spyPausedUntil.current = Date.now() + 1500;
+    // Released as soon as the smooth scroll ends, where the browser says so.
+    const release = () => {
+      spyPausedUntil.current = Date.now() + 100;
+      window.removeEventListener('scrollend', release);
+    };
+    window.addEventListener('scrollend', release);
+    setActiveCategory(id);
+  };
 
   const handleProductClick = (product: MenuProduct) => {
     setSelectedProduct(product);
@@ -121,26 +140,15 @@ export default function HomeScreen() {
   if (loading) return <LoadingSkeleton />;
 
   /*
-   * A menu that fails outright still has a shop around it — header, hours,
-   * address, the account drawer — so the failure is a banner over whatever did
-   * load rather than a page that replaces all of it. Only a total failure with
-   * nothing to show falls back to the full-page state.
+   * A menu that fails still has a shop around it — header, hours, address,
+   * the account drawer — so the page stays and the failure is shown inside
+   * it, in German, with a way to try again. The technical message (`error`)
+   * is for the console only: guests saw "Unexpected token '<'…" and
+   * "Failed to fetch" here before (1.11.2026).
    */
-  if (!menuData) {
-    return (
-      <div className='flex min-h-screen items-center justify-center bg-background'>
-        <div className='text-center'>
-          {/* The server's own message is English and not for guests. */}
-          <p className='mb-4 text-brand-red'>{t.menuLoadFailed}</p>
-          <button onClick={() => window.location.reload()} className='rounded-lg bg-primary px-6 py-2 font-medium text-selected-text'>
-            {t.retry ?? 'Retry'}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const noResults = !!q && filteredCategories.length === 0;
+  const menuFailed = !menuData;
+  const menuEmpty = !!menuData && productsByCategory.length === 0;
+  const noResults = !menuFailed && !menuEmpty && !!q && filteredCategories.length === 0;
 
   return (
     <div className='min-h-screen bg-background text-foreground'>
@@ -167,14 +175,38 @@ export default function HomeScreen() {
         onOpenPreorder={() => setPreorderOpen(true)}
         preorderLabel={preorderLabel}
       />
-      <CategoryNavBar categories={productsByCategory} activeCategory={shownCategory} onCategoryClick={setActiveCategory} query={query} onQueryChange={setQuery} />
+      {productsByCategory.length > 0 && (
+        <CategoryNavBar categories={productsByCategory} activeCategory={shownCategory} onCategoryClick={handleCategoryClick} query={query} onQueryChange={setQuery} />
+      )}
 
       <main id='menu-main' className='shell shell-pad pb-28 pt-6 lg:pb-20' role='main'>
-        {error && (
+        {menuFailed && (
+          <div className='flex flex-col items-center px-5 py-20 text-center'>
+            <div className='flex h-[78px] w-[78px] items-center justify-center rounded-full bg-surface-1'>
+              <AlertCircle className='h-9 w-9 text-warning' strokeWidth={1.8} />
+            </div>
+            <div className='mt-5 text-lg font-extrabold'>{t.menuUnavailable}</div>
+            <button onClick={() => window.location.reload()} className='mt-5 h-[46px] rounded-[14px] bg-primary px-5 text-sm font-extrabold text-selected-text'>
+              {t.reload}
+            </button>
+          </div>
+        )}
+
+        {menuEmpty && (
+          <div className='flex flex-col items-center px-5 py-20 text-center'>
+            <div className='flex h-[78px] w-[78px] items-center justify-center rounded-full bg-surface-1'>
+              <UtensilsCrossed className='h-9 w-9 text-fg-faint' />
+            </div>
+            <div className='mt-5 text-lg font-extrabold'>{t.menuEmpty}</div>
+          </div>
+        )}
+
+        {/* A refresh failed while an older copy is on screen: keep it, say so. */}
+        {error && menuData && (
           <div className='anim-fade mb-6 flex items-center gap-3.5 rounded-2xl border border-warning/35 bg-warning/10 px-4.5 py-4'>
             <AlertCircle className='h-[22px] w-[22px] shrink-0 text-warning' strokeWidth={1.8} />
             <div className='min-w-0 flex-1'>
-              <div className='text-[14.5px] font-extrabold text-white'>{t.menuLoadFailed}</div>
+              <div className='text-[14.5px] font-extrabold text-white'>{t.menuUnavailable}</div>
               <div className='mt-0.5 text-[13px] font-medium text-fg-secondary'>{t.menuLoadFailedSub}</div>
             </div>
             <button

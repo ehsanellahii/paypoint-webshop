@@ -5,6 +5,7 @@ import BrandMark from './BrandMark';
 import { useLanguage } from '~/contexts/language-context';
 import { getTodayTimings, isRestaurantOpen } from '~/lib/restaurantTimings';
 import { getStoreCover } from '~/lib/storeMedia';
+import { formatStoreAddress } from '~/lib/storeAddress';
 
 export default function MenuHero() {
   const storeInfo = useStore();
@@ -12,7 +13,8 @@ export default function MenuHero() {
   const cover = getStoreCover(storeInfo);
   const open = isRestaurantOpen(storeInfo?.timings || {});
   const { close } = getTodayTimings(storeInfo?.timings);
-  const address = [storeInfo?.address, storeInfo?.city].filter(Boolean).join(' · ');
+  // "Adalbertstraße 36, 10179 Berlin" — the free text already carries the city, so joining it again printed it twice.
+  const address = formatStoreAddress(storeInfo);
 
   return (
     <div className='shell shell-pad pt-7'>

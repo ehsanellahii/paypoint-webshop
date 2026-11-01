@@ -8,6 +8,7 @@ import { getStoreData } from '~/lib/api';
 import { buildStoreMetadata } from '~/lib/metadata';
 import ThemeVars from '~/lib/ThemeVars';
 import StoreProvider from '~/contexts/store-context';
+import TableTokenNotice from '~/components/TableTokenNotice';
 
 // export const dynamic = 'force-dynamic';
 // export const revalidate = 0;
@@ -49,6 +50,8 @@ const page = async ({ params, searchParams }: { params: Promise<{ slug: string }
     <StoreProvider value={storeInfo}>
       <ThemeVars primary={primaryColor} selectedText={selectedColor} />
       {device === 'mobile' ? <MobileMenuScreen /> : <HomeScreen />}
+      {/* An old or foreign table QR: the shop loaded without the table — say so, without blocking the order. */}
+      {storeInfo.tableTokenInvalid && <TableTokenNotice />}
     </StoreProvider>
   );
 };

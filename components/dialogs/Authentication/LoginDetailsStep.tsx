@@ -5,6 +5,7 @@ import { AlertCircle, Loader2, Phone, User } from 'lucide-react';
 import type { LoginFormValues } from './auth.schema';
 import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
+import { useStoreNavigation } from '~/hooks/useStoreNavigation';
 import { cn } from '~/lib/utils';
 import { APPLE_SIGNIN_ENABLED } from '~/lib/firebase';
 
@@ -59,6 +60,7 @@ export default function LoginDetailsStep({ loading, values, errors, onChange, on
   const { t } = useLanguage();
   const storeInfo = useStore();
   const brand = storeInfo?.brandName || '';
+  const { base } = useStoreNavigation();
 
   const fieldError = errors.customerName || errors.phoneNumber || errors.phoneCode;
 
@@ -157,14 +159,15 @@ export default function LoginDetailsStep({ loading, values, errors, onChange, on
         {t.continueAsGuest}
       </button>
 
+      {/*
+        The restaurant's own privacy policy, in a new tab so the sign-in stays
+        open. It used to name PayPoint's B2B terms ("ausschließlich für
+        Unternehmer") as if a guest accepted them by signing in.
+      */}
       <p className='mt-[22px] text-xs font-medium leading-relaxed text-muted-foreground-2'>
-        {t.legalNoticePrefix}{' '}
-        <a href='https://get-paypoint.de/agb' target='_blank' rel='noopener noreferrer' className='font-semibold text-[#5b9dff]'>
-          {t.termAndConditions}
-        </a>{' '}
-        {t.legalNoticeAnd}{' '}
-        <a href='https://get-paypoint.de/privacy' target='_blank' rel='noopener noreferrer' className='font-semibold text-[#5b9dff]'>
-          {t.privacyPolicy}
+        {t.legalNoticePrivacyPrefix}{' '}
+        <a href={`${base}/datenschutz`} target='_blank' rel='noopener noreferrer' className='font-semibold text-[#5b9dff]'>
+          {t.legalNoticePrivacyLink}
         </a>
         .
       </p>

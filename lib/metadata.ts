@@ -3,6 +3,7 @@ import { headers } from 'next/headers';
 
 import type { IStoreInfo } from './types';
 import { getStoreBase } from './storeBase';
+import { translations } from './i18n';
 
 /**
  * Absolute origin of the current request.
@@ -118,7 +119,13 @@ export async function buildStoreMetadata({ store, slug, path = '', title }: Buil
   const streetLine = [store?.street?.trim(), store?.houseNumber?.trim()].filter(Boolean).join(' ');
   const cityLine = [store?.postalCode?.trim(), city].filter(Boolean).join(' ');
   const where = [streetLine, cityLine].filter(Boolean).join(', ');
-  const description = where ? `Order online from ${brand} — ${where}.` : `Order online from ${brand}.`;
+  /*
+   * German, like `og:locale` below: the link preview is what a guest sees in
+   * WhatsApp before opening the shop, and the shop opens in German. It was
+   * English next to a de_DE locale (1.11.2026).
+   */
+  const de = translations.de;
+  const description = (where ? de.metaDescriptionWithAddress : de.metaDescription).replace('{brand}', brand).replace('{address}', where);
 
   /*
    * The same picture the header shows, so the preview matches the page people

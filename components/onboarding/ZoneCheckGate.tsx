@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Search, MapPin, Crosshair, Check, AlertCircle, ArrowRight, ChevronLeft, Phone, Loader2, Clock, Leaf } from 'lucide-react';
+import { Search, MapPin, Crosshair, Check, AlertCircle, ArrowRight, ChevronLeft, Phone, Loader2, Clock, X, ShoppingBag, UtensilsCrossed } from 'lucide-react';
 import { SAFE_TOP } from '~/components/mobile/MobileShell';
 import { isKeyRefused, MAPS_AUTH_ERROR, useGoogleMaps } from '~/hooks/useGoogleMaps';
 import { useIsMobile } from '~/contexts/device-context';
@@ -13,6 +13,7 @@ import { getStoreCover } from '~/lib/storeMedia';
 import { checkDeliveryZone, formatPrice, type DeliveryZone } from '@/lib/api';
 import { localDeliveryRate, zoneDelivers } from '~/lib/deliveryZone';
 import { addressGeocodeRequest, addressPredictionRequest, countryCodeOf, isGermanAddress } from '~/lib/addressSearch';
+import { storeHighlights, zoneResultLine, type StoreHighlight } from '~/lib/storeHighlights';
 
 function parseAddress(place: google.maps.places.PlaceResult | google.maps.GeocoderResult): DeliveryAddress {
   const comps = place.address_components ?? [];
@@ -310,6 +311,31 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
     setTimeout(() => onDone(true), 600);
   };
 
+  /*
+   * Whether the store takes pickup orders at all. Every "switch to pickup"
+   * route out of this gate is hidden when it does not — offering it only to
+   * land the guest on a shop that cannot take the order.
+   */
+  const pickupAvailable = storeInfo?.settings?.orderTypes?.takeaway !== false;
+
+  /*
+   * Escape leaves the gate, as the close button does. With the suggestion list
+   * open it closes the list first, the way a combobox is expected to.
+   */
+  const hasPredictions = predictions.length > 0;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (hasPredictions) {
+        setPredictions([]);
+        return;
+      }
+      onDone(true);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [hasPredictions, onDone]);
+
   const brand = storeInfo?.brandName || 'Restaurant';
   const cover = getStoreCover(storeInfo);
   const logo = storeInfo?.settings?.logo || storeInfo?.logo || '';
@@ -325,6 +351,8 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
     result,
     continuing,
     phone: storeInfo?.phone || '',
+    highlights: storeHighlights(storeInfo, t),
+    storeDeliveryTime: storeInfo?.deliveryTime ?? null,
     inputRef,
     onQueryChange: (value) => {
       // Typing again means the value is no longer one we resolved, so
@@ -344,9 +372,11 @@ export default function ZoneCheckGate({ onDone }: { onDone: (dismissForever?: bo
       setQuery('');
     },
     onPickup: () => {
+      if (!pickupAvailable) return;
       setOrderType('pickup');
       onDone(true);
     },
+    pickupAvailable,
     onSkip: () => onDone(true),
     onCheck: runCheck,
     checking,
@@ -383,7 +413,62 @@ type ZoneViewProps = {
   checking: boolean;
   canCheck: boolean;
   mapsError: string;
+  /** The store takes pickup orders; false hides every route to pickup. */
+  pickupAvailable: boolean;
+  /** Hero lines from the store's own data (see storeHighlights). */
+  highlights: StoreHighlight[];
+  /** Store-wide ETA, for a result without a zone time. */
+  storeDeliveryTime: number | null;
 };
+
+const HIGHLIGHT_ICON = { time: Clock, orderTypes: ShoppingBag, cuisine: UtensilsCrossed } as const;
+
+/** The line under "we deliver to you": zone time, else store time, else none — plus the minimum. */
+function okLine(t: ZoneViewProps['t'], result: Extract<Result, { status: 'ok' }>, storeDeliveryTime: number | null) {
+  return zoneResultLine(result.zone?.deliveryTime, storeDeliveryTime, result.min != null ? `${t.from ?? 'from'} ${formatPrice(result.min)}` : '', t);
+}
+
+/** The maps-error sub-line, naming only the ways out the store actually offers. */
+function lookupUnavailableSub(t: ZoneViewProps['t'], pickupAvailable: boolean, phone: string) {
+  if (pickupAvailable && phone) return t.addressLookupUnavailableSub;
+  if (pickupAvailable) return t.addressLookupUnavailableSubPickup;
+  if (phone) return t.addressLookupUnavailableSubCall;
+  return t.addressLookupUnavailableSubBrowse;
+}
+
+/**
+ * What a guest can still do when the address search is down: pick up, call,
+ * or — when the store offers neither — look at the menu. Takes the place of the
+ * check button, which cannot work without the search.
+ */
+function LookupFallbackActions({ t, phone, pickupAvailable, onPickup, onSkip, mobile }: Pick<ZoneViewProps, 't' | 'phone' | 'pickupAvailable' | 'onPickup' | 'onSkip'> & { mobile?: boolean }) {
+  const primary = 'flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-[15.5px] font-extrabold text-selected-text transition active:scale-[0.98]';
+  const secondary = cn(
+    'flex h-14 w-full items-center justify-center gap-2 rounded-2xl border-border-strong text-[15px] font-bold text-white transition active:scale-[0.98]',
+    mobile ? 'border-[1.5px]' : 'border hover:bg-surface-hover',
+  );
+  return (
+    <div className='mt-3.5 flex flex-col gap-2.5'>
+      {pickupAvailable && (
+        <button type='button' onClick={onPickup} className={primary}>
+          <ShoppingBag className='h-[18px] w-[18px]' />
+          {t.choosePickup}
+        </button>
+      )}
+      {phone && (
+        <a href={`tel:${phone}`} className={pickupAvailable ? secondary : primary}>
+          <Phone className='h-[17px] w-[17px]' />
+          {t.callUs ?? 'Call'}
+        </a>
+      )}
+      {!pickupAvailable && !phone && (
+        <button type='button' onClick={onSkip} className={primary}>
+          {t.exploreShopAnyway} <ArrowRight className='h-[17px] w-[17px]' />
+        </button>
+      )}
+    </div>
+  );
+}
 
 function DesktopZonePanel({
   t,
@@ -403,10 +488,14 @@ function DesktopZonePanel({
   onContinue,
   onReset,
   onPickup,
+  onSkip,
   onCheck,
   checking,
   canCheck,
   mapsError,
+  pickupAvailable,
+  highlights,
+  storeDeliveryTime,
 }: ZoneViewProps) {
   return (
     <div className='fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto bg-background p-6'>
@@ -436,33 +525,42 @@ function DesktopZonePanel({
           </div>
           <div className='relative'>
             <h2 className='m-0 max-w-[340px] font-serif text-[38px] font-extrabold leading-[1.08] tracking-tight'>{t.zoneHeroTitle ?? 'Real cuisine, fresh to your door.'}</h2>
-            <div className='mt-6 flex flex-col gap-3.5'>
-              {[
-                {
-                  icon: Clock,
-                  text: t.zoneFeature1 ?? 'Delivered in 20–40 min',
-                },
-                {
-                  icon: Leaf,
-                  text: t.zoneFeature2 ?? 'Fresh ingredients, daily',
-                },
-              ].map(({ icon: Icon, text }, i) => (
-                <div key={i} className='flex items-center gap-3'>
-                  <span className='flex h-[38px] w-[38px] items-center justify-center rounded-[11px] bg-white/10 backdrop-blur'>
-                    <Icon className='h-[19px] w-[19px]' />
-                  </span>
-                  <span className='text-[14.5px] font-semibold text-fg-strong'>{text}</span>
-                </div>
-              ))}
-            </div>
+            {/* Only what the store's own data says — see storeHighlights. */}
+            {highlights.length > 0 && (
+              <div className='mt-6 flex flex-col gap-3.5'>
+                {highlights.map(({ kind, text }) => {
+                  const Icon = HIGHLIGHT_ICON[kind];
+                  return (
+                    <div key={kind} className='flex items-center gap-3'>
+                      <span className='flex h-[38px] w-[38px] items-center justify-center rounded-[11px] bg-white/10 backdrop-blur'>
+                        <Icon className='h-[19px] w-[19px]' />
+                      </span>
+                      <span className='text-[14.5px] font-semibold text-fg-strong'>{text}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
         {/* Right: address check */}
         <div className='relative flex flex-col justify-center p-8 md:p-12'>
+          {/*
+            The way out, as the phone's back button is: straight to the menu.
+            Without it a first-time guest on a desktop could only leave by
+            entering an address in the delivery area.
+          */}
+          <button
+            type='button'
+            onClick={onSkip}
+            aria-label={t.close}
+            className='absolute right-[18px] top-[18px] flex h-10 w-10 items-center justify-center rounded-full bg-surface-3 text-white transition hover:bg-elevated active:scale-90'>
+            <X className='h-[18px] w-[18px]' strokeWidth={2.2} />
+          </button>
           <div className='inline-flex self-start items-center gap-2 rounded-full border border-success/30 bg-success/10 px-3 py-[7px]'>
             <span className='h-[7px] w-[7px] rounded-full bg-success' />
-            <span className='text-[11.5px] font-extrabold uppercase tracking-[0.05em] text-[#7fd083]'>{t.deliveryAndPickup ?? 'Delivery & pickup'}</span>
+            <span className='text-[11.5px] font-extrabold uppercase tracking-[0.05em] text-[#7fd083]'>{pickupAvailable ? (t.deliveryAndPickup ?? 'Delivery & pickup') : t.delivery}</span>
           </div>
           <h1 className='mt-4 text-[34px] font-extrabold leading-[1.05] tracking-tight'>{t.doWeDeliver ?? 'Do we deliver to you?'}</h1>
           <p className='mt-3 max-w-[360px] text-[15px] font-medium leading-relaxed text-muted-foreground'>
@@ -524,11 +622,12 @@ function DesktopZonePanel({
               </span>
               <div className='min-w-0 flex-1'>
                 <div className='text-[15px] font-extrabold'>{t.addressLookupUnavailable ?? 'Address search is unavailable'}</div>
-                <div className='mt-0.5 text-[12.5px] font-medium text-[#d6b3ae]'>{t.addressLookupUnavailableSub ?? 'Choose pickup, or call us and we’ll check for you.'}</div>
+                <div className='mt-0.5 text-[12.5px] font-medium text-[#d6b3ae]'>{lookupUnavailableSub(t, pickupAvailable, phone)}</div>
                 {process.env.NODE_ENV !== 'production' && <div className='mt-1.5 font-mono text-[11px] text-muted-foreground-2'>{mapsError}</div>}
               </div>
             </div>
           )}
+          {mapsError && !result && <LookupFallbackActions t={t} phone={phone} pickupAvailable={pickupAvailable} onPickup={onPickup} onSkip={onSkip} />}
 
           {/*
             Check CTA. Two states, straight from the design: enabled is the
@@ -537,7 +636,7 @@ function DesktopZonePanel({
             --muted-foreground-2 tokens. The spinner is the design's continue
             button spinner, which is the only one it specifies.
           */}
-          {!result && (
+          {!result && !mapsError && (
             <button
               onClick={onCheck}
               disabled={!canCheck}
@@ -558,6 +657,12 @@ function DesktopZonePanel({
               )}
             </button>
           )}
+          {/* Pickup without an address — the design's "switch to pickup" link, offered up front. */}
+          {!result && !mapsError && pickupAvailable && (
+            <button onClick={onPickup} className='mt-2.5 flex h-[50px] w-full items-center justify-center gap-2 rounded-[14px] text-sm font-bold text-muted-foreground transition hover:text-white'>
+              {t.choosePickup} <ArrowRight className='h-4 w-4' />
+            </button>
+          )}
 
           {/* Result: OK */}
           {result?.status === 'ok' && (
@@ -569,8 +674,7 @@ function DesktopZonePanel({
                 <div className='min-w-0 flex-1'>
                   <div className='text-[15px] font-extrabold'>{t.weDeliverToYou ?? 'Yay, we deliver to you!'}</div>
                   <div className='mt-0.5 text-[12.5px] font-medium text-fg-secondary'>
-                    {t.deliveryTimeApprox ?? 'Delivery approx. 20–40 min'}
-                    {result.min != null && ` · ${t.from ?? 'from'} ${formatPrice(result.min)}`}
+                    {okLine(t, result, storeDeliveryTime)}
                   </div>
                 </div>
               </div>
@@ -611,8 +715,10 @@ function DesktopZonePanel({
                   </a>
                 )}
               </div>
-              <button onClick={onPickup} className='mt-2.5 flex h-[50px] w-full items-center justify-center gap-2 rounded-[14px] text-sm font-bold text-muted-foreground transition hover:text-white'>
-                {t.switchToPickupBrowse ?? 'Switch to pickup & browse'} <ArrowRight className='h-4 w-4' />
+              <button
+                onClick={pickupAvailable ? onPickup : onSkip}
+                className='mt-2.5 flex h-[50px] w-full items-center justify-center gap-2 rounded-[14px] text-sm font-bold text-muted-foreground transition hover:text-white'>
+                {pickupAvailable ? (t.switchToPickupBrowse ?? 'Switch to pickup & browse') : t.exploreShopAnyway} <ArrowRight className='h-4 w-4' />
               </button>
             </>
           )}
@@ -652,6 +758,8 @@ function MobileZoneScreen({
   canCheck,
   mapsError,
   onSkip,
+  pickupAvailable,
+  storeDeliveryTime,
 }: ZoneViewProps) {
   return (
     <div className='noscroll fixed inset-0 z-[89] flex justify-center overflow-y-auto bg-background'>
@@ -730,14 +838,15 @@ function MobileZoneScreen({
               </span>
               <div className='min-w-0 flex-1'>
                 <div className='text-[15px] font-extrabold'>{t.addressLookupUnavailable ?? 'Address search is unavailable'}</div>
-                <div className='mt-0.5 text-[12.5px] font-medium text-[#d6b3ae]'>{t.addressLookupUnavailableSub ?? 'Choose pickup, or call us and we’ll check for you.'}</div>
+                <div className='mt-0.5 text-[12.5px] font-medium text-[#d6b3ae]'>{lookupUnavailableSub(t, pickupAvailable, phone)}</div>
                 {process.env.NODE_ENV !== 'production' && <div className='mt-1.5 font-mono text-[11px] text-muted-foreground-2'>{mapsError}</div>}
               </div>
             </div>
           )}
+          {mapsError && !result && <LookupFallbackActions t={t} phone={phone} pickupAvailable={pickupAvailable} onPickup={onPickup} onSkip={onSkip} mobile />}
 
           {/* Check CTA — same two states as the desktop panel. */}
-          {!result && (
+          {!result && !mapsError && (
             <button
               onClick={onCheck}
               disabled={!canCheck}
@@ -767,8 +876,7 @@ function MobileZoneScreen({
                 <div className='min-w-0 flex-1'>
                   <div className='text-[15px] font-extrabold text-white'>{t.weDeliverToYou ?? 'Yay, we deliver to you!'}</div>
                   <div className='mt-0.5 text-[12.5px] font-medium text-fg-secondary'>
-                    {t.deliveryTimeApprox ?? 'Delivery approx. 20–40 min'}
-                    {result.min != null && ` · ${t.from ?? 'from'} ${formatPrice(result.min)}`}
+                    {okLine(t, result, storeDeliveryTime)}
                   </div>
                 </div>
               </div>
@@ -810,8 +918,8 @@ function MobileZoneScreen({
                   {t.callUs ?? 'Call'}
                 </a>
               )}
-              <button onClick={onPickup} className='mt-2.5 flex h-[50px] w-full items-center justify-center gap-2 text-sm font-bold text-muted-foreground'>
-                {t.switchToPickupBrowse ?? 'Switch to pickup & browse'} <ArrowRight className='h-4 w-4' />
+              <button onClick={pickupAvailable ? onPickup : onSkip} className='mt-2.5 flex h-[50px] w-full items-center justify-center gap-2 text-sm font-bold text-muted-foreground'>
+                {pickupAvailable ? (t.switchToPickupBrowse ?? 'Switch to pickup & browse') : t.exploreShopAnyway} <ArrowRight className='h-4 w-4' />
               </button>
             </>
           )}

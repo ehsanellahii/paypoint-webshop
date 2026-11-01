@@ -211,9 +211,22 @@ export interface Translations {
   standard: string;
   priority: string;
   zoneHeroTitle: string;
-  zoneFeature1: string;
-  zoneFeature2: string;
-  zoneFeature3: string;
+  /* ui-a 01.11.2026: opening status, restaurant info sheet, legal pages, notices. */
+  weekdaySunday: string;
+  weekdayMonday: string;
+  weekdayTuesday: string;
+  weekdayWednesday: string;
+  weekdayThursday: string;
+  weekdayFriday: string;
+  weekdaySaturday: string;
+  /** "{time}" is replaced. */
+  opensTodayAt: string;
+  opensTomorrowAt: string;
+  /** "{day}" and "{time}" are replaced. */
+  opensOnDayAt: string;
+  openNowUntil: string;
+  closedToday: string;
+  restaurantInfo: string;
   deliveryAndPickup: string;
   doWeDeliver: string;
   doWeDeliverSub: string;
@@ -254,6 +267,40 @@ export interface Translations {
   /** shop-money 01.11.2026: an order reference that could not be loaded (no payment involved). */
   orderLookupFailed: string;
   orderLookupFailedSub: string;
+  /** Zone gate: the way to pickup without checking an address. */
+  choosePickup: string;
+  /** Address search down; the sub-line depends on what the store still offers. */
+  addressLookupUnavailableSubCall: string;
+  addressLookupUnavailableSubPickup: string;
+  addressLookupUnavailableSubBrowse: string;
+  /** Legal pages (imprint, privacy policy). */
+  privacyPolicyTitle: string;
+  legalImprintIntro: string;
+  legalRepresentedBy: string;
+  legalContact: string;
+  legalPhone: string;
+  legalRegister: string;
+  legalVatId: string;
+  legalVatIdSub: string;
+  backToMenu: string;
+  /** Login dialog: "{prefix} <link>privacy policy</link>." */
+  legalNoticePrivacyPrefix: string;
+  legalNoticePrivacyLink: string;
+  /** A refused table QR code; the shop loaded without the table. */
+  tableTokenInvalidTitle: string;
+  tableTokenInvalidSub: string;
+  dismiss: string;
+  /** Cart: a pre-order slot that passed while the shop is closed (pick a new one), and the way to pre-order when closed. */
+  preorderSlotPassedPickNew: string;
+  chooseNewTime: string;
+  storeClosedPreorderHint: string;
+  preorderedFor: string;
+  /** Gate / sign-in hero: "{eta}" is replaced. */
+  highlightDeliveryTime: string;
+  /** 404 pages: inside a store, and for an address that names no store. */
+  notFoundTitle: string;
+  notFoundStoreSub: string;
+  notFoundRootSub: string;
   /** Where cash / the card reader is paid when ordering at a table. */
   atTable: string;
   callTheRestaurant: string;
@@ -270,6 +317,7 @@ export interface Translations {
   addressLookupUnavailable: string;
   addressLookupUnavailableSub: string;
   weDeliverToYou: string;
+  /** "{eta}" is replaced, e.g. "20–30". */
   deliveryTimeApprox: string;
   from: string;
   continueToMenu: string;
@@ -401,6 +449,28 @@ export interface Translations {
   favoriteProducts: string;
   register: string;
   loginToSeeProfileAndFavorites: string;
+
+  /* ui-b 01.11.2026: menu states, sold out, product notes, labels. */
+  productSoldOut: string;
+  sizeLabel: string;
+  itemNoteTitle: string;
+  itemNotePlaceholder: string;
+  menuUnavailable: string;
+  menuEmpty: string;
+  minutesShort: string;
+  decreaseQuantity: string;
+  increaseQuantity: string;
+  clearSearch: string;
+  scrollLeft: string;
+  scrollRight: string;
+  changeDeliveryAddress: string;
+  /** Followed by the number: "Wähle genau 2". */
+  chooseExactly: string;
+  /** Followed by "1–3": "Wähle 1–3". */
+  chooseBetween: string;
+  /** Link previews (og/twitter description). "{brand}" and "{address}" are replaced. */
+  metaDescription: string;
+  metaDescriptionWithAddress: string;
 }
 
 export const translations: Record<Language, Translations> = {
@@ -610,10 +680,20 @@ export const translations: Record<Language, Translations> = {
     deliverySpeedLabel: 'Delivery time',
     standard: 'Standard',
     priority: 'Priority',
-    zoneHeroTitle: 'Real cuisine, fresh to your door.',
-    zoneFeature1: 'Delivered in 20–40 min',
-    zoneFeature2: 'Fresh ingredients, daily',
-    zoneFeature3: '4.8 ★ · 820+ reviews',
+    zoneHeroTitle: 'Order straight from the restaurant.',
+    weekdaySunday: 'Sunday',
+    weekdayMonday: 'Monday',
+    weekdayTuesday: 'Tuesday',
+    weekdayWednesday: 'Wednesday',
+    weekdayThursday: 'Thursday',
+    weekdayFriday: 'Friday',
+    weekdaySaturday: 'Saturday',
+    opensTodayAt: 'Opens today at {time}',
+    opensTomorrowAt: 'Opens tomorrow at {time}',
+    opensOnDayAt: 'Opens {day} at {time}',
+    openNowUntil: 'Open now · until {time}',
+    closedToday: 'Closed',
+    restaurantInfo: 'Restaurant info',
     deliveryAndPickup: 'Delivery & pickup',
     doWeDeliver: 'Do we deliver to you?',
     doWeDeliverSub: 'Enter your address — we’ll instantly check if you’re in our delivery area.',
@@ -650,6 +730,32 @@ export const translations: Record<Language, Translations> = {
     orderNotConfirmedSub: 'Your payment may have gone through, but we have not been able to confirm the order. Please contact the restaurant with the reference below before ordering again.',
     orderLookupFailed: 'Order not found',
     orderLookupFailedSub: 'We could not load an order with this number. If you have questions about it, please contact the restaurant with the number below.',
+    choosePickup: 'Choose pickup',
+    addressLookupUnavailableSubCall: 'We can’t check your postcode automatically right now. Call us and we’ll check for you.',
+    addressLookupUnavailableSubPickup: 'We can’t check your postcode automatically right now. Choose pickup, or have a look at the menu.',
+    addressLookupUnavailableSubBrowse: 'We can’t check your postcode automatically right now. You can still have a look at the menu.',
+    privacyPolicyTitle: 'Privacy policy',
+    legalImprintIntro: 'Information pursuant to § 5 DDG (German Digital Services Act)',
+    legalRepresentedBy: 'Represented by',
+    legalContact: 'Contact',
+    legalPhone: 'Phone',
+    legalRegister: 'Register entry',
+    legalVatId: 'VAT ID',
+    legalVatIdSub: 'VAT identification number pursuant to § 27a UStG',
+    backToMenu: 'Back to the menu',
+    legalNoticePrivacyPrefix: 'How your data is handled is explained in our',
+    legalNoticePrivacyLink: 'privacy policy',
+    tableTokenInvalidTitle: 'This table code is no longer valid.',
+    tableTokenInvalidSub: 'Please ask the staff for the current QR code – you can still place an order.',
+    dismiss: 'Dismiss',
+    preorderSlotPassedPickNew: 'The chosen time has passed – please pick a new one.',
+    chooseNewTime: 'Choose a new time',
+    storeClosedPreorderHint: 'You can pre-order for later.',
+    preorderedFor: 'Pre-ordered for',
+    highlightDeliveryTime: 'Delivery in about {eta} min',
+    notFoundTitle: 'Page not found',
+    notFoundStoreSub: 'This page doesn’t exist (any more). The menu is just one tap away.',
+    notFoundRootSub: 'This page doesn’t exist (any more). Please check the link or scan the QR code again.',
     atTable: 'At the table',
     callTheRestaurant: 'Call the restaurant',
     orderRefunded: 'This order was refunded',
@@ -663,7 +769,7 @@ export const translations: Record<Language, Translations> = {
     addressLookupUnavailable: 'Address search is unavailable',
     addressLookupUnavailableSub: 'We can’t check your postcode automatically right now. Choose pickup, or call us and we’ll check for you.',
     weDeliverToYou: 'Yay, we deliver to you!',
-    deliveryTimeApprox: 'Delivery approx. 20–40 min',
+    deliveryTimeApprox: 'Delivery approx. {eta} min',
     from: 'from',
     continueToMenu: 'Continue to menu',
     outsideDeliveryArea: 'Unfortunately outside our area',
@@ -794,6 +900,24 @@ export const translations: Record<Language, Translations> = {
     LIMIT_EXCEEDED: 'You have exceeded the usage limit for this voucher. Please check the voucher terms and conditions.',
     MINIMUM_ORDER_VALUE_NOT_MET: 'Your order does not meet the minimum value required to apply this voucher. Please add more items to your cart.',
     CUSTOMER_NOT_FOUND: 'The customer associated with this voucher could not be found. Please ensure you are logged in with the correct account.',
+
+    productSoldOut: 'Sold out',
+    sizeLabel: 'Size',
+    itemNoteTitle: 'Note for this item (optional)',
+    itemNotePlaceholder: 'e.g. no onions',
+    menuUnavailable: 'The menu could not be loaded.',
+    menuEmpty: 'There are no dishes here yet.',
+    minutesShort: 'min',
+    decreaseQuantity: 'Decrease quantity',
+    increaseQuantity: 'Increase quantity',
+    clearSearch: 'Clear search',
+    scrollLeft: 'Scroll left',
+    scrollRight: 'Scroll right',
+    changeDeliveryAddress: 'Change delivery address',
+    chooseExactly: 'Choose exactly',
+    chooseBetween: 'Choose',
+    metaDescription: 'Order online from {brand}.',
+    metaDescriptionWithAddress: 'Order online from {brand} — {address}.',
   },
   de: {
     openUntil: 'Geöffnet bis',
@@ -892,8 +1016,8 @@ export const translations: Record<Language, Translations> = {
     specialInstructions: 'Spezielle Anweisungen / Notizen (Optional)',
     minimumOrderAmountIs: 'Mindestbestellwert ist',
     requiredChooseAtleast: 'Erforderlich: Wählen Sie mindestens',
-    chooseMin: 'Wählen Sie mindestens',
-    chooseUpTo: 'Wählen Sie bis zu',
+    chooseMin: 'Wähle mindestens',
+    chooseUpTo: 'Wähle bis zu',
     maxReached: 'Maximal erreicht',
     add: 'Hinzufügen',
     selected: 'ausgewählt',
@@ -1001,10 +1125,20 @@ export const translations: Record<Language, Translations> = {
     deliverySpeedLabel: 'Lieferzeit',
     standard: 'Standard',
     priority: 'Priority',
-    zoneHeroTitle: 'Echte italienische Küche, frisch zu dir.',
-    zoneFeature1: 'In 20–40 Min. bei dir',
-    zoneFeature2: 'Frische Zutaten, täglich',
-    zoneFeature3: '4,8 ★ · 820+ Bewertungen',
+    zoneHeroTitle: 'Direkt beim Restaurant bestellen.',
+    weekdaySunday: 'Sonntag',
+    weekdayMonday: 'Montag',
+    weekdayTuesday: 'Dienstag',
+    weekdayWednesday: 'Mittwoch',
+    weekdayThursday: 'Donnerstag',
+    weekdayFriday: 'Freitag',
+    weekdaySaturday: 'Samstag',
+    opensTodayAt: 'Öffnet heute um {time}',
+    opensTomorrowAt: 'Öffnet morgen um {time}',
+    opensOnDayAt: 'Öffnet {day} um {time}',
+    openNowUntil: 'Jetzt geöffnet · bis {time}',
+    closedToday: 'Geschlossen',
+    restaurantInfo: 'Restaurant-Info',
     deliveryAndPickup: 'Lieferung & Abholung',
     doWeDeliver: 'Liefern wir zu dir?',
     doWeDeliverSub: 'Gib deine Adresse ein — wir prüfen sofort, ob du im Liefergebiet liegst.',
@@ -1041,6 +1175,32 @@ export const translations: Record<Language, Translations> = {
     orderNotConfirmedSub: 'Deine Zahlung wurde möglicherweise ausgeführt, aber wir konnten die Bestellung nicht bestätigen. Bitte kontaktiere das Restaurant mit der unten stehenden Referenz, bevor du erneut bestellst.',
     orderLookupFailed: 'Bestellung nicht gefunden',
     orderLookupFailedSub: 'Zu dieser Nummer konnten wir keine Bestellung laden. Wenn du Fragen dazu hast, melde dich bitte mit der Nummer unten beim Restaurant.',
+    choosePickup: 'Abholung wählen',
+    addressLookupUnavailableSubCall: 'Wir können deine PLZ gerade nicht automatisch prüfen. Ruf uns an – wir prüfen es für dich.',
+    addressLookupUnavailableSubPickup: 'Wir können deine PLZ gerade nicht automatisch prüfen. Wähle Abholung oder schau dir die Speisekarte an.',
+    addressLookupUnavailableSubBrowse: 'Wir können deine PLZ gerade nicht automatisch prüfen. Du kannst dir die Speisekarte trotzdem ansehen.',
+    privacyPolicyTitle: 'Datenschutzerklärung',
+    legalImprintIntro: 'Angaben gemäß § 5 DDG',
+    legalRepresentedBy: 'Vertreten durch',
+    legalContact: 'Kontakt',
+    legalPhone: 'Telefon',
+    legalRegister: 'Registereintrag',
+    legalVatId: 'Umsatzsteuer-ID',
+    legalVatIdSub: 'Umsatzsteuer-Identifikationsnummer gemäß § 27a UStG',
+    backToMenu: 'Zurück zur Speisekarte',
+    legalNoticePrivacyPrefix: 'Wie wir mit deinen Daten umgehen, steht in unserer',
+    legalNoticePrivacyLink: 'Datenschutzerklärung',
+    tableTokenInvalidTitle: 'Dieser Tisch-Code ist nicht mehr gültig.',
+    tableTokenInvalidSub: 'Bitte frag das Personal nach dem aktuellen QR-Code – du kannst trotzdem bestellen.',
+    dismiss: 'Ausblenden',
+    preorderSlotPassedPickNew: 'Die gewählte Zeit ist vorbei – bitte wähle eine neue.',
+    chooseNewTime: 'Neue Zeit wählen',
+    storeClosedPreorderHint: 'Du kannst für später vorbestellen.',
+    preorderedFor: 'Vorbestellt für',
+    highlightDeliveryTime: 'Lieferung in ca. {eta} Min.',
+    notFoundTitle: 'Seite nicht gefunden',
+    notFoundStoreSub: 'Diese Seite gibt es hier nicht (mehr). Zur Speisekarte ist es nur ein Tipp.',
+    notFoundRootSub: 'Diese Seite gibt es nicht (mehr). Prüf den Link oder scanne den QR-Code noch einmal.',
     atTable: 'Am Tisch',
     callTheRestaurant: 'Restaurant anrufen',
     orderRefunded: 'Diese Bestellung wurde erstattet',
@@ -1054,7 +1214,7 @@ export const translations: Record<Language, Translations> = {
     addressLookupUnavailable: 'Adresssuche nicht verfügbar',
     addressLookupUnavailableSub: 'Wir können deine PLZ gerade nicht automatisch prüfen. Wähle Abholung oder ruf uns an – wir prüfen es für dich.',
     weDeliverToYou: 'Juhu, wir liefern zu dir!',
-    deliveryTimeApprox: 'Lieferzeit ca. 20–40 Min',
+    deliveryTimeApprox: 'Lieferzeit ca. {eta} Min.',
     from: 'ab',
     continueToMenu: 'Weiter zum Menü',
     outsideDeliveryArea: 'Leider außerhalb',
@@ -1185,6 +1345,24 @@ export const translations: Record<Language, Translations> = {
     LIMIT_EXCEEDED: 'Sie haben das Nutzungslimit für diesen Gutschein überschritten. Bitte überprüfen Sie die Gutscheinbedingungen.',
     MINIMUM_ORDER_VALUE_NOT_MET: 'Ihr Bestellwert erfüllt nicht den Mindestwert, um diesen Gutschein anzuwenden. Bitte fügen Sie Ihrer Bestellung weitere Artikel hinzu.',
     CUSTOMER_NOT_FOUND: 'Der dem Gutschein zugeordnete Kunde konnte nicht gefunden werden. Bitte stellen Sie sicher, dass Sie mit dem richtigen Konto angemeldet sind.',
+
+    productSoldOut: 'Ausverkauft',
+    sizeLabel: 'Größe',
+    itemNoteTitle: 'Anmerkung zum Artikel (optional)',
+    itemNotePlaceholder: 'z. B. ohne Zwiebeln',
+    menuUnavailable: 'Die Speisekarte konnte nicht geladen werden.',
+    menuEmpty: 'Hier gibt es gerade noch keine Gerichte.',
+    minutesShort: 'Min.',
+    decreaseQuantity: 'Menge verringern',
+    increaseQuantity: 'Menge erhöhen',
+    clearSearch: 'Suche leeren',
+    scrollLeft: 'Nach links blättern',
+    scrollRight: 'Nach rechts blättern',
+    changeDeliveryAddress: 'Lieferadresse ändern',
+    chooseExactly: 'Wähle genau',
+    chooseBetween: 'Wähle',
+    metaDescription: 'Bei {brand} online bestellen.',
+    metaDescriptionWithAddress: 'Bei {brand} online bestellen – {address}.',
   },
 };
 

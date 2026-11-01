@@ -72,14 +72,14 @@ export default function CategoryNavBar({ categories, activeCategory, onCategoryC
         {/* Left / right fade + arrows */}
         {scroll.canScrollLeft && (
           <div className='pointer-events-none absolute inset-y-0 left-0 flex items-center bg-gradient-to-l from-transparent to-[rgba(20,20,22,0.96)] pl-2 pr-10'>
-            <button onClick={() => step('left')} aria-label='Scroll left' className='pointer-events-auto flex h-[30px] w-[30px] items-center justify-center rounded-full border border-border-strong bg-surface-2 text-white shadow-[0_4px_14px_-4px_rgba(0,0,0,0.6)] hover:bg-surface-suggest'>
+            <button onClick={() => step('left')} aria-label={t.scrollLeft} className='pointer-events-auto flex h-[30px] w-[30px] items-center justify-center rounded-full border border-border-strong bg-surface-2 text-white shadow-[0_4px_14px_-4px_rgba(0,0,0,0.6)] hover:bg-surface-suggest'>
               <ChevronLeft className='h-[15px] w-[15px]' />
             </button>
           </div>
         )}
         {scroll.canScrollRight && (
           <div className='pointer-events-none absolute inset-y-0 right-0 flex items-center bg-gradient-to-r from-transparent to-[rgba(20,20,22,0.96)] pl-10 pr-2'>
-            <button onClick={() => step('right')} aria-label='Scroll right' className='pointer-events-auto flex h-[30px] w-[30px] items-center justify-center rounded-full border border-border-strong bg-surface-2 text-white shadow-[0_4px_14px_-4px_rgba(0,0,0,0.6)] hover:bg-surface-suggest'>
+            <button onClick={() => step('right')} aria-label={t.scrollRight} className='pointer-events-auto flex h-[30px] w-[30px] items-center justify-center rounded-full border border-border-strong bg-surface-2 text-white shadow-[0_4px_14px_-4px_rgba(0,0,0,0.6)] hover:bg-surface-suggest'>
               <ChevronRight className='h-[15px] w-[15px]' />
             </button>
           </div>
@@ -98,7 +98,7 @@ export default function CategoryNavBar({ categories, activeCategory, onCategoryC
             className='min-w-0 flex-1 border-none bg-transparent text-sm font-medium text-white outline-none'
           />
           {query && (
-            <button onClick={() => onQueryChange('')} aria-label='Clear search' className='flex h-6 w-6 items-center justify-center rounded-full bg-control text-white'>
+            <button onClick={() => onQueryChange('')} aria-label={t.clearSearch} className='flex h-6 w-6 items-center justify-center rounded-full bg-control text-white'>
               <X className='h-3 w-3' />
             </button>
           )}

@@ -22,9 +22,9 @@ export default function BottomBar({ onOpenCart }: { onOpenCart: () => void }) {
     <div
       className='fixed inset-x-0 bottom-0 z-50 bg-gradient-to-t from-[rgba(20,20,22,0.98)] to-transparent px-3.5 pt-2.5 lg:hidden'
       style={{ paddingBottom: 'calc(0.625rem + env(safe-area-inset-bottom))' }}>
+      {/* Opens the cart even when closed: the cart is where a closed shop offers pre-ordering. */}
       <button
-        onClick={() => !isClosed && onOpenCart()}
-        disabled={isClosed}
+        onClick={onOpenCart}
         data-cart-target='1'
         className='flex h-14 w-full items-center gap-3 rounded-2xl bg-primary px-2.5 text-selected-text shadow-[0_12px_30px_-8px_rgba(0,0,0,0.6)] transition active:scale-[0.98] disabled:opacity-60'>
         <span className='flex h-8 min-w-[30px] items-center justify-center rounded-[10px] bg-black px-2.5 text-sm font-extrabold text-white'>{totalItems}</span>

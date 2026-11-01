@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  CalendarClock,
   ChevronLeft,
   Minus,
   Plus,
@@ -12,6 +13,8 @@ import {
 } from "lucide-react";
 
 import MobileShell from "~/components/mobile/MobileShell";
+import MobilePreorderSheet from "~/components/mobile/MobilePreorderSheet";
+import { useCartTiming } from "~/components/Cart/useCartTiming";
 import SwipeToRemove from '~/components/ui/SwipeToRemove';
 import SmartImage from '~/lib/SmartImage';
 import { fetchCartRecommendations, formatPrice } from "~/lib/api";
@@ -21,7 +24,6 @@ import { useAddress } from "~/contexts/address-context";
 import { useStore } from "~/contexts/store-context";
 import { useLanguage } from "~/contexts/language-context";
 import { useStoreNavigation } from "~/hooks/useStoreNavigation";
-import { useOrderingWindow } from "~/hooks/useOrderingWindow";
 import { isSoldOut, requiresConfiguration } from "~/lib/productConfig";
 import { cartLineTotal } from "~/lib/utils";
 
@@ -46,8 +48,14 @@ export default function MobileCartScreen() {
   } = useCart();
   const { orderType, deliveryRate } = useAddress();
   const { toMenu, toCheckout, toProduct, back } = useStoreNavigation();
-  // Closed shop, no pre-order slot: there is nothing to check out into.
-  const { orderingClosed } = useOrderingWindow();
+  /*
+   * Closed, or a chosen time that has passed: the order bar opens the time
+   * picker instead of standing disabled. It used to say "closed" and do
+   * nothing, so on a phone a closed shop could never be pre-ordered from.
+   */
+  const timing = useCartTiming();
+  const [preorderOpen, setPreorderOpen] = useState(false);
+  const footerNote = timing.notice || timing.slotLabel;
 
   // Only one row may sit open at a time, and a row being removed is held for
   // the length of its collapse animation before it leaves the cart.
@@ -116,7 +124,7 @@ export default function MobileCartScreen() {
         <h1 className="text-[17px] font-extrabold text-white">{t.yourOrder}</h1>
       </div>
 
-      <div className="noscroll min-h-0 flex-1 overflow-y-auto px-[18px] pb-[140px] pt-1.5">
+      <div className={cn("noscroll min-h-0 flex-1 overflow-y-auto px-[18px] pt-1.5", footerNote ? "pb-[200px]" : "pb-[140px]")}>
         {cart.length === 0 ? (
           <div className="mt-10 flex flex-col items-center px-5 text-center">
             <div className="flex h-[74px] w-[74px] items-center justify-center rounded-full bg-card">
@@ -370,6 +378,20 @@ export default function MobileCartScreen() {
             paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 14px)",
           }}
         >
+          {/* Why the bar picks a time instead of going to checkout — or the time already chosen. */}
+          {footerNote && (
+            <div className="mb-3 flex items-center gap-3 rounded-[14px] bg-card px-3.5 py-2.5">
+              <CalendarClock className="h-[18px] w-[18px] shrink-0 text-muted-foreground" strokeWidth={1.8} />
+              <span className="min-w-0 flex-1 text-[13px] font-semibold leading-snug text-fg-secondary">
+                {timing.notice || `${t.preorderedFor} ${timing.slotLabel}`}
+              </span>
+              {!timing.notice && (
+                <button onClick={() => setPreorderOpen(true)} className="-my-2 -mr-2 h-11 shrink-0 px-2 text-[13px] font-bold text-white">
+                  {t.edit}
+                </button>
+              )}
+            </div>
+          )}
           <div className="mb-3 flex flex-col gap-1.5 text-[13px] font-medium text-fg-secondary">
             <div className="flex justify-between">
               <span>{t.subtotal}</span>
@@ -401,8 +423,7 @@ export default function MobileCartScreen() {
             with the count in a filled disc rather than a pill.
           */}
           <button
-            onClick={toCheckout}
-            disabled={orderingClosed}
+            onClick={timing.action === "checkout" ? toCheckout : () => setPreorderOpen(true)}
             className="-mx-[18px] flex w-[calc(100%+36px)] items-center gap-3.5 rounded-t-[18px] bg-primary px-5 text-selected-text shadow-[0_-8px_24px_rgba(0,0,0,0.45)] transition active:scale-[0.99] disabled:opacity-60 disabled:shadow-none"
             style={{ height: 'calc(64px + env(safe-area-inset-bottom, 0px))', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
           >
@@ -410,7 +431,7 @@ export default function MobileCartScreen() {
               {totalItems}
             </span>
             <span className="flex-1 text-left text-[16.5px] font-extrabold tracking-[-0.01em]">
-              {orderingClosed ? (t.storeClosedNow ?? t.closed) : t.goToCheckout}
+              {timing.action === "newTime" ? t.chooseNewTime : timing.action === "preorder" ? t.preorder : t.goToCheckout}
             </span>
             <span className="shrink-0 whitespace-nowrap text-[16.5px] font-extrabold">
               {formatPrice(total)}
@@ -418,6 +439,8 @@ export default function MobileCartScreen() {
           </button>
         </div>
       )}
+
+      <MobilePreorderSheet open={preorderOpen} onClose={() => setPreorderOpen(false)} onConfirm={timing.saveSlot} onStandard={timing.clearSlot} />
     </MobileShell>
   );
 }

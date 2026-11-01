@@ -235,14 +235,19 @@ select:focus-visible {
  * scroll-margin, so the sticky header stack is accounted for here and nowhere
  * else. It used to be duplicated as a hardcoded pixel offset in the nav and a
  * different `scroll-mt` on the section, so the two disagreed and jumps landed
- * short. The larger mobile value covers the search row that only exists there.
+ * short.
+ *
+ * The stack is the header (74px) plus the category bar (61px) = 135px, and
+ * below 768px (`md`) the bar also carries the search row (+65px) = 200px. The
+ * old 100px / 210px-below-640px hid the heading behind the bar after every
+ * tap (1.11.2026). Each value leaves 16px of air under the bar.
  */
 .menu-anchor {
-  scroll-margin-top: 100px;
+  scroll-margin-top: 151px;
 }
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .menu-anchor {
-    scroll-margin-top: 210px;
+    scroll-margin-top: 216px;
   }
 }
 

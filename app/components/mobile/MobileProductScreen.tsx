@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Check, Loader2, Minus, Plus, X } from 'lucide-react';
+import { AlertCircle, Check, Loader2, Minus, Pencil, Plus, X } from 'lucide-react';
 
 import MobileShell from '~/components/mobile/MobileShell';
 import { formatPrice, getAllProducts } from '~/lib/api';
@@ -13,6 +13,7 @@ import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
 import { useStoreNavigation } from '~/hooks/useStoreNavigation';
 import { isSoldOut } from '~/lib/productConfig';
+import { ITEM_NOTE_MAX } from '~/lib/itemNote';
 
 type Customization = Record<string, Record<string, number>>;
 
@@ -30,12 +31,13 @@ export default function MobileProductScreen({ productId }: { productId: string }
    * The menu the menu screen already loaded, priced for the current order
    * type — opening a product used to download the whole menu again.
    */
-  const { menuData, loading } = useMenu();
+  const { menuData, loading, error } = useMenu();
   const product = useMemo<MenuProduct | null>(
     () => (menuData ? (getAllProducts(menuData).find((p) => String(p.id) === productId || String(p._id) === productId) ?? null) : null),
     [menuData, productId],
   );
   const [quantity, setQuantity] = useState(1);
+  const [notes, setNotes] = useState('');
   const [selected, setSelected] = useState<Customization>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   // A single-SKU product has no size to choose; the row below stays hidden.
@@ -91,9 +93,11 @@ export default function MobileProductScreen({ productId }: { productId: string }
     return sum * quantity;
   }, [product, selected, quantity, selectedSku]);
 
+  // Nothing to add when every size is off, or the one shown is (sold out).
+  const unavailable = !!product && (isSoldOut(product) || selectedSku?.available === false);
+
   const submit = () => {
-    // Every size sold out: nothing to add (the menu's "+" opens this screen for it).
-    if (!product || isSoldOut(product)) return;
+    if (!product || unavailable) return;
     const next: Record<string, string> = {};
     for (const section of product.addOns ?? []) {
       const min = section.minimumQuantity ?? 0;
@@ -104,7 +108,7 @@ export default function MobileProductScreen({ productId }: { productId: string }
       document.getElementById(`opt-${Object.keys(next)[0]}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
-    addToCart(product, quantity, selected, undefined, selectedSku);
+    addToCart(product, quantity, selected, notes, selectedSku);
     back();
   };
 
@@ -119,12 +123,21 @@ export default function MobileProductScreen({ productId }: { productId: string }
   }
 
   if (!product) {
+    // The menu did not load at all: say so, never "nothing found".
+    const failed = !menuData && !!error;
     return (
       <MobileShell>
         <div className='flex h-full flex-col items-center justify-center gap-4 px-6 text-center'>
-          <div className='text-lg font-extrabold'>{t.noResults}</div>
-          <button onClick={toMenu} className='h-12 rounded-[14px] bg-primary px-5 text-sm font-extrabold text-selected-text'>
-            {t.continueToMenu}
+          {failed && (
+            <div className='flex h-[78px] w-[78px] items-center justify-center rounded-full bg-card'>
+              <AlertCircle className='h-9 w-9 text-warning' strokeWidth={1.8} />
+            </div>
+          )}
+          <div className='text-lg font-extrabold'>{failed ? t.menuUnavailable : t.noResults}</div>
+          <button
+            onClick={failed ? () => window.location.reload() : toMenu}
+            className='h-12 rounded-[14px] bg-primary px-5 text-sm font-extrabold text-selected-text'>
+            {failed ? t.reload : t.continueToMenu}
           </button>
         </div>
       </MobileShell>
@@ -144,7 +157,11 @@ export default function MobileProductScreen({ productId }: { productId: string }
 
       <div className='noscroll min-h-0 flex-1 overflow-y-auto bg-background'>
         <div className='relative h-[210px] overflow-hidden'>
-          {img ? <SmartImage src={img} alt={product.name} sizes='440px' className='object-cover' wrapperClassName='absolute inset-0' /> : <div className='absolute inset-0 bg-card' />}
+          {img ? (
+            <SmartImage src={img} alt={product.name} sizes='(max-width: 440px) 100vw, 440px' className='object-cover' wrapperClassName='absolute inset-0' />
+          ) : (
+            <div className='absolute inset-0 bg-card' />
+          )}
         </div>
 
         {/* The sheet overlaps the photo, so the title sits over its lower edge. */}
@@ -156,7 +173,7 @@ export default function MobileProductScreen({ productId }: { productId: string }
           {/* Size first: it sets the price the options are added to. */}
           {skus.length > 1 && (
             <div className='mt-[26px]'>
-              <p className='text-[16px] font-extrabold'>Größe</p>
+              <p className='text-[16px] font-extrabold'>{t.sizeLabel}</p>
               <div className='mt-2.5 flex flex-wrap gap-2'>
                 {skus.map((sku) => {
                   const isSelected = sku._id === selectedSku?._id;
@@ -172,7 +189,7 @@ export default function MobileProductScreen({ productId }: { productId: string }
                     >
                       <span className='text-[14.5px] font-extrabold'>{sku.name ?? product.name}</span>
                       <span className='text-[13px] font-semibold text-fg-soft'>
-                        {sku.available ? formatPrice(sku.price) : 'Nicht verfügbar'}
+                        {sku.available ? formatPrice(sku.price) : t.notAvailable}
                       </span>
                     </button>
                   );
@@ -228,17 +245,23 @@ export default function MobileProductScreen({ productId }: { productId: string }
                         {qty === 0 ? (
                           <button
                             onClick={() => setOption(section, option._id, 1)}
-                            aria-label={t.add}
-                            className='flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-primary text-selected-text transition active:scale-[0.85]'>
+                            aria-label={`${t.add}: ${option.name}`}
+                            className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-primary text-selected-text transition after:absolute after:-inset-1.5 after:content-[''] active:scale-[0.85]">
                             <Plus className='h-4 w-4' strokeWidth={2.6} />
                           </button>
                         ) : (
                           <div className='flex shrink-0 items-center gap-1 rounded-[11px] bg-card p-1'>
-                            <button onClick={() => setOption(section, option._id, qty - 1)} aria-label='less' className='flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-surface-3 text-white'>
+                            <button
+                              onClick={() => setOption(section, option._id, qty - 1)}
+                              aria-label={t.decreaseQuantity}
+                              className="relative flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-surface-3 text-white after:absolute after:-inset-[7px] after:content-['']">
                               <Minus className='h-4 w-4' strokeWidth={2.6} />
                             </button>
                             <span className='min-w-5 text-center text-[14.5px] font-extrabold'>{qty}</span>
-                            <button onClick={() => setOption(section, option._id, qty + 1)} aria-label='more' className='flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-primary text-selected-text'>
+                            <button
+                              onClick={() => setOption(section, option._id, qty + 1)}
+                              aria-label={t.increaseQuantity}
+                              className="relative flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-primary text-selected-text after:absolute after:-inset-[7px] after:content-['']">
                               <Plus className='h-4 w-4' strokeWidth={2.6} />
                             </button>
                           </div>
@@ -250,22 +273,51 @@ export default function MobileProductScreen({ productId }: { productId: string }
               </div>
             );
           })}
+
+          {/* Note — the same optional field as the desktop modal. */}
+          <div className='mt-[26px] h-px bg-border' />
+          <h3 className='m-0 mt-[26px] text-[18px] font-extrabold tracking-[-0.01em] text-white'>
+            <label htmlFor='product-note-mobile'>{t.itemNoteTitle}</label>
+          </h3>
+          <div className='mt-3 flex items-start gap-3 rounded-[14px] border border-border bg-card px-4 py-3.5'>
+            <Pencil className='mt-0.5 h-5 w-5 shrink-0 text-muted-foreground' />
+            <textarea
+              id='product-note-mobile'
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder={t.itemNotePlaceholder}
+              maxLength={ITEM_NOTE_MAX}
+              rows={2}
+              className='min-w-0 flex-1 resize-none border-none bg-transparent text-base font-medium leading-relaxed text-white outline-none'
+            />
+          </div>
         </div>
       </div>
 
       {/* Quantity + add, pinned above the home indicator. */}
       <div className='absolute inset-x-0 bottom-0 z-[6] flex items-center gap-3 bg-background px-4 pt-3' style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 14px)' }}>
         <div className='flex shrink-0 items-center gap-1 rounded-[13px] bg-card p-[5px]'>
-          <button onClick={() => setQuantity((q) => Math.max(1, q - 1))} aria-label='less' className='flex h-[34px] w-[34px] items-center justify-center rounded-[9px] text-white'>
+          <button
+            onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+            disabled={unavailable}
+            aria-label={t.decreaseQuantity}
+            className="relative flex h-[34px] w-[34px] items-center justify-center rounded-[9px] text-white after:absolute after:-inset-[5px] after:content-[''] disabled:opacity-40">
             <Minus className='h-[18px] w-[18px]' strokeWidth={2.4} />
           </button>
           <span className='min-w-6 text-center text-[15px] font-extrabold'>{quantity}</span>
-          <button onClick={() => setQuantity((q) => Math.min(20, q + 1))} aria-label='more' className='flex h-[34px] w-[34px] items-center justify-center rounded-[9px] text-white'>
+          <button
+            onClick={() => setQuantity((q) => Math.min(20, q + 1))}
+            disabled={unavailable}
+            aria-label={t.increaseQuantity}
+            className="relative flex h-[34px] w-[34px] items-center justify-center rounded-[9px] text-white after:absolute after:-inset-[5px] after:content-[''] disabled:opacity-40">
             <Plus className='h-[18px] w-[18px]' strokeWidth={2.4} />
           </button>
         </div>
-        <button onClick={submit} disabled={!!product && isSoldOut(product)} className='h-[52px] flex-1 rounded-2xl bg-primary text-[15px] font-extrabold text-selected-text transition active:scale-[0.98]'>
-          {t.addToCart} · {formatPrice(total)}
+        <button
+          onClick={submit}
+          disabled={unavailable}
+          className='h-[52px] flex-1 rounded-2xl bg-primary text-[15px] font-extrabold text-selected-text transition active:scale-[0.98] disabled:bg-card disabled:text-fg-disabled disabled:active:scale-100'>
+          {unavailable ? t.productSoldOut : `${t.addToCart} · ${formatPrice(total)}`}
         </button>
       </div>
     </MobileShell>

@@ -1,101 +1,40 @@
-import Link from 'next/link';
+import type { Metadata } from 'next';
+import { headers } from 'next/headers';
+import { SearchX } from 'lucide-react';
+
+import NotFoundMenuLink from '~/components/NotFoundMenuLink';
+import { translations } from '~/lib/i18n';
+import { CUSTOM_DOMAIN_HEADER } from '~/lib/requestHeaders';
+import './globals.css';
 
 /*
- * Where "More information" goes. Configured rather than written in: this
- * deployment serves every restaurant, so the one address that is always
- * correct here is the platform's own. The template shipped a placeholder that
- * would have gone to a dead host in production.
+ * The 404 for an address that names no store (/gibtsnicht) and for any path
+ * no route claims (/pizza-mandm/foo), always with a real 404 status. It sits
+ * outside every store's layout — the store layout is the root layout — so
+ * it is neutral and German, in the shop's own dark look. It used to be an
+ * unstyled English sales page for PayPoint ("Welcome to PayPoint Online
+ * Kiosk … Increase your revenue"), shown to restaurant guests who had
+ * mistyped a link.
+ *
+ * No provider is above this page, so the German texts are read directly.
  */
-const PLATFORM_URL = process.env.NEXT_PUBLIC_PLATFORM_URL || 'https://paypointpos.de';
+const t = translations.de;
 
-export default function NotFound() {
+export const metadata: Metadata = {
+  title: t.notFoundTitle,
+  robots: { index: false, follow: false },
+};
+
+export default async function NotFound() {
+  const onCustomDomain = !!(await headers()).get(CUSTOM_DOMAIN_HEADER);
   return (
-    <main
-      style={{
-        height: '100dvh',
-        maxHeight: '100vh',
-        overflow: 'auto',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '24px',
-        // background: 'radial-gradient(1200px 600px at 50% 15%, rgba(99,102,241,0.12), transparent 60%), #f6f7fb',
-        color: '#0f172a',
-      }}>
-      <section
-        style={{
-          width: '100%',
-          maxWidth: 820,
-          textAlign: 'center',
-          padding: '56px 28px',
-          borderRadius: 20,
-          background: 'rgba(255,255,255,0.78)',
-          border: '1px solid rgba(15, 23, 42, 0.10)',
-          boxShadow: '0 22px 70px rgba(15, 23, 42, 0.12)',
-          backdropFilter: 'blur(10px)',
-        }}>
-        <span
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '6px 12px',
-            borderRadius: 999,
-            background: 'rgba(15, 23, 42, 0.05)',
-            border: '1px solid rgba(15, 23, 42, 0.08)',
-            fontSize: 13,
-            color: 'rgba(15, 23, 42, 0.7)',
-            marginBottom: 18,
-          }}>
-          <span
-            style={{
-              width: 6,
-              height: 6,
-              borderRadius: 999,
-              background: '#00afef',
-              display: 'inline-block',
-            }}
-          />
-          404 • Page not found
-        </span>
-
-        <h1
-          style={{
-            fontSize: 44,
-            lineHeight: 1.1,
-            margin: '0 0 12px',
-            letterSpacing: -0.6,
-          }}>
-          Welcome to PayPoint Online Kiosk
-        </h1>
-
-        <p style={{ fontSize: 18, margin: '0 0 6px', color: 'rgba(15,23,42,0.8)' }}>Let your guests order faster from their own phones.</p>
-        <p style={{ fontSize: 18, margin: '0 0 28px', color: 'rgba(15,23,42,0.8)' }}>Receive orders from any device, anytime. Increase your revenue and reduce costs!</p>
-
-        <div
-          style={{
-            display: 'flex',
-            gap: 12,
-            justifyContent: 'center',
-            flexWrap: 'wrap',
-          }}>
-          <Link
-            href={PLATFORM_URL}
-            style={{
-              padding: '12px 18px',
-              borderRadius: 12,
-              background: '#00afef',
-              color: '#ffffff',
-              textDecoration: 'none',
-              fontWeight: 700,
-              boxShadow: '0 10px 30px rgba(17,24,39,0.22)',
-            }}>
-            More information →
-          </Link>
-        </div>
-
-        <p style={{ marginTop: 22, fontSize: 13, color: 'rgba(15,23,42,0.55)' }}>If you typed the address manually, please check the spelling.</p>
-      </section>
+    <main lang='de' className='flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-background px-6 text-center'>
+      <div className='flex h-[74px] w-[74px] items-center justify-center rounded-full bg-card'>
+        <SearchX className='h-9 w-9 text-muted-foreground' strokeWidth={1.6} />
+      </div>
+      <h1 className='mt-1 text-[19px] font-extrabold text-white'>{t.notFoundTitle}</h1>
+      <p className='max-w-[340px] text-[13.5px] font-medium leading-relaxed text-muted-foreground'>{t.notFoundRootSub}</p>
+      <NotFoundMenuLink onCustomDomain={onCustomDomain} label={t.backToMenu} />
     </main>
   );
 }

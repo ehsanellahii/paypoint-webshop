@@ -8,8 +8,9 @@ import { Dialog } from '@base-ui/react/dialog';
 import { AddOnGroup, cn, getImageURL, MenuProduct } from '~/lib/utils';
 import { useLanguage } from '~/contexts/language-context';
 import SmartImage from '~/lib/SmartImage';
-import { isSoldOut } from '~/lib/productConfig';
 import { useStore } from '~/contexts/store-context';
+import { isSoldOut } from '~/lib/productConfig';
+import { ITEM_NOTE_MAX } from '~/lib/itemNote';
 
 type CartItemCustomization = Record<string, Record<string, number>>; // sectionId -> { optionId -> qty }
 
@@ -20,7 +21,7 @@ interface ProductModalProps {
 }
 
 export default function ProductModal({ product, isOpen, onClose }: ProductModalProps) {
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const { addToCart } = useCart();
   const storeInfo = useStore();
   const logoURL = storeInfo?.settings?.logo || '';
@@ -49,6 +50,9 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
   }, [isOpen, product]);
 
   if (!product) return null;
+
+  // Nothing to add when every size is off, or the one shown is (sold out).
+  const unavailable = isSoldOut(product) || selectedSku?.available === false;
 
   const getGroupTotal = (sectionId: string, map: CartItemCustomization) => {
     const group = map[sectionId] || {};
@@ -130,8 +134,7 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
   };
 
   const handleAddToCart = () => {
-    // Every size sold out: nothing to add (the menu card opens this modal for it).
-    if (isSoldOut(product)) return;
+    if (unavailable) return;
     const v = validateCustomizations();
     if (!v.ok) {
       setErrors(v.errors);
@@ -191,7 +194,7 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                 */}
                 {skus.length > 1 && (
                   <div className='mt-5'>
-                    <p className='text-[15px] font-extrabold'>Größe</p>
+                    <p className='text-[15px] font-extrabold'>{t.sizeLabel}</p>
                     <div className='mt-2.5 flex flex-wrap gap-2'>
                       {skus.map((sku) => {
                         const isSelected = sku._id === selectedSku?._id;
@@ -207,7 +210,7 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                           >
                             <span className='text-[14.5px] font-extrabold'>{sku.name ?? product.name}</span>
                             <span className='text-[13px] font-semibold text-fg-soft'>
-                              {sku.available ? formatPrice(sku.price) : 'Nicht verfügbar'}
+                              {sku.available ? formatPrice(sku.price) : t.notAvailable}
                             </span>
                           </button>
                         );
@@ -244,13 +247,9 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                         {(min > 0 || max > 0) && (
                           <div className={cn('mt-1 text-[12.5px] font-medium italic', hasError ? 'text-brand-red' : 'text-muted-foreground')}>
                             {min === max && min > 0
-                              ? language === 'de'
-                                ? `Wähle genau ${min}`
-                                : `Choose exactly ${min}`
+                              ? `${t.chooseExactly} ${min}`
                               : min > 0 && max > 0
-                                ? language === 'de'
-                                  ? `Wähle min ${min} bis ${max}`
-                                  : `Choose ${min}–${max}`
+                                ? `${t.chooseBetween} ${min}–${max}`
                                 : min > 0
                                   ? `${t.chooseMin ?? 'Choose at least'} ${min}`
                                   : `${t.chooseUpTo ?? 'Choose up to'} ${max}`}
@@ -296,17 +295,17 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                                     type='button'
                                     disabled={maxReached}
                                     onClick={() => setOptionQty(section, item._id, 1)}
-                                    aria-label='add'
+                                    aria-label={`${t.add}: ${item.name}`}
                                     className='flex h-8 w-8 items-center justify-center rounded-[10px] bg-primary text-selected-text transition active:scale-[0.85] disabled:opacity-40'>
                                     <Plus className='h-4 w-4' strokeWidth={2.6} />
                                   </button>
                                 ) : (
                                   <div className='flex items-center gap-1 rounded-[11px] bg-card p-1'>
-                                    <button type='button' onClick={() => setOptionQty(section, item._id, qty - 1)} aria-label='less' className='flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-control text-white transition active:scale-[0.85]'>
+                                    <button type='button' onClick={() => setOptionQty(section, item._id, qty - 1)} aria-label={t.decreaseQuantity} className='flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-control text-white transition active:scale-[0.85]'>
                                       <Minus className='h-4 w-4' strokeWidth={2.6} />
                                     </button>
                                     <span className='min-w-5 text-center text-[14.5px] font-extrabold'>{qty}</span>
-                                    <button type='button' disabled={max > 0 && groupTotal >= max} onClick={() => setOptionQty(section, item._id, qty + 1)} aria-label='more' className='flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-primary text-selected-text transition active:scale-[0.85] disabled:opacity-40'>
+                                    <button type='button' disabled={max > 0 && groupTotal >= max} onClick={() => setOptionQty(section, item._id, qty + 1)} aria-label={t.increaseQuantity} className='flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-primary text-selected-text transition active:scale-[0.85] disabled:opacity-40'>
                                       <Plus className='h-4 w-4' strokeWidth={2.6} />
                                     </button>
                                   </div>
@@ -321,15 +320,16 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
 
                 {/* Note */}
                 <h3 className='mt-6 text-base font-extrabold'>
-                  {t.specialInstructions}
-                  <span className='ml-2 text-[12.5px] font-semibold text-muted-foreground'>· {t.optional ?? 'optional'}</span>
+                  <label htmlFor='product-note'>{t.itemNoteTitle}</label>
                 </h3>
                 <div className='mt-3 flex items-start gap-3 rounded-[14px] border border-border bg-surface-1 px-4 py-3.5'>
                   <Pencil className='mt-0.5 h-5 w-5 shrink-0 text-muted-foreground' />
                   <textarea
+                    id='product-note'
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    placeholder={t.enterDeliveryNotes ?? ''}
+                    placeholder={t.itemNotePlaceholder}
+                    maxLength={ITEM_NOTE_MAX}
                     rows={2}
                     className='min-w-0 flex-1 resize-none border-none bg-transparent text-sm font-medium leading-relaxed text-white outline-none'
                   />
@@ -340,20 +340,28 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
             {/* Footer */}
             <div className='flex shrink-0 items-center gap-4 border-t border-border px-6 py-4'>
               <div className='flex shrink-0 items-center gap-1 rounded-[13px] bg-surface-3 p-[5px]'>
-                <button onClick={() => setQuantity((q) => Math.max(1, q - 1))} aria-label='less' className='flex h-[34px] w-[34px] items-center justify-center rounded-[9px] text-white transition active:scale-[0.85]'>
+                <button
+                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  disabled={unavailable}
+                  aria-label={t.decreaseQuantity}
+                  className='flex h-[34px] w-[34px] items-center justify-center rounded-[9px] text-white transition active:scale-[0.85] disabled:opacity-40'>
                   <Minus className='h-[18px] w-[18px]' strokeWidth={2.4} />
                 </button>
                 <span className='min-w-6 text-center text-[15px] font-extrabold'>{quantity}</span>
-                <button onClick={() => setQuantity((q) => Math.min(20, q + 1))} aria-label='more' className='flex h-[34px] w-[34px] items-center justify-center rounded-[9px] text-white transition active:scale-[0.85]'>
+                <button
+                  onClick={() => setQuantity((q) => Math.min(20, q + 1))}
+                  disabled={unavailable}
+                  aria-label={t.increaseQuantity}
+                  className='flex h-[34px] w-[34px] items-center justify-center rounded-[9px] text-white transition active:scale-[0.85] disabled:opacity-40'>
                   <Plus className='h-[18px] w-[18px]' strokeWidth={2.4} />
                 </button>
               </div>
               <button
                 onClick={handleAddToCart}
-                disabled={isSoldOut(product)}
                 type='button'
-                className='flex h-[52px] flex-1 items-center justify-center gap-2.5 rounded-[15px] bg-primary text-[15px] font-extrabold text-selected-text transition active:scale-[0.98]'>
-                {t.add} · {formatPrice(calculateTotalPrice())}
+                disabled={unavailable}
+                className='flex h-[52px] flex-1 items-center justify-center gap-2.5 rounded-[15px] bg-primary text-[15px] font-extrabold text-selected-text transition active:scale-[0.98] disabled:bg-surface-3 disabled:text-fg-disabled disabled:active:scale-100'>
+                {unavailable ? t.productSoldOut : `${t.add} · ${formatPrice(calculateTotalPrice())}`}
               </button>
             </div>
           </Dialog.Popup>

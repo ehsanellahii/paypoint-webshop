@@ -1,12 +1,15 @@
 'use client';
 
 import Image from 'next/image';
+import Link from 'next/link';
 import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
+import { useStoreNavigation } from '~/hooks/useStoreNavigation';
 
 export default function Footer() {
   const storeInfo = useStore();
   const { t } = useLanguage();
+  const { base, withToken } = useStoreNavigation();
   return (
     <footer className='mx-auto shell mb-6 mt-4 rounded-2xl border border-border bg-surface-1 p-6 text-sm'>
       <div className='mx-auto'>
@@ -32,22 +35,18 @@ export default function Footer() {
             </a>
           </div>
 
-          {/* Legal Links + Copyright - Right */}
+          {/*
+            Legal links + copyright - right. The restaurant's own imprint and
+            privacy policy: PayPoint's terms are for its business customers
+            ("ausschließlich für Unternehmer") and do not apply to a guest.
+          */}
           <div className='text-center text-muted-foreground md:text-right'>
-            <a
-              href='https://get-paypoint.de/agb'
-              target='_blank'
-              rel='noopener noreferrer'
-              className='mr-4 transition hover:text-white hover:underline'>
-              {t.termAndConditions}
-            </a>
-            <a
-              href='https://get-paypoint.de/privacy'
-              target='_blank'
-              rel='noopener noreferrer'
-              className='mr-4 transition hover:text-white hover:underline'>
-              {t.privacyPolicy}
-            </a>
+            <Link href={withToken(`${base}/impressum`)} className='mr-4 transition hover:text-white hover:underline'>
+              {t.imprint}
+            </Link>
+            <Link href={withToken(`${base}/datenschutz`)} className='mr-4 transition hover:text-white hover:underline'>
+              {t.privacy}
+            </Link>
             <span>© PayPoint POS UG</span>
           </div>
         </div>

@@ -11,7 +11,8 @@ import { isSoldOut, requiresConfiguration } from '~/lib/productConfig';
 import { useStore } from '~/contexts/store-context';
 import SmartImage from '~/lib/SmartImage';
 import { flyToCart } from '~/lib/flyToCart';
-import { useOrderingWindow } from '~/hooks/useOrderingWindow';
+import PreorderModal from '~/components/menu/PreorderModal';
+import { useCartTiming } from './useCartTiming';
 import { useStoreNavigation } from '~/hooks/useStoreNavigation';
 import SwipeToRemove from '~/components/ui/SwipeToRemove';
 
@@ -44,8 +45,12 @@ export default function Cart({ isOpen: controlledIsOpen, onOpenChange, recommend
   };
   const { t } = useLanguage();
   const { toCheckout } = useStoreNavigation();
-  // Closed shop, no pre-order slot: there is nothing to check out into.
-  const { orderingClosed } = useOrderingWindow();
+  /*
+   * Closed, or a chosen time that has passed: the button opens the time picker
+   * rather than standing disabled — see useCartTiming.
+   */
+  const timing = useCartTiming();
+  const [preorderOpen, setPreorderOpen] = useState(false);
 
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const isOpen = controlledIsOpen ?? internalIsOpen;
@@ -292,8 +297,8 @@ export default function Cart({ isOpen: controlledIsOpen, onOpenChange, recommend
             {/* Checkout */}
             <div className='shrink-0 px-7 pb-[22px] pt-4'>
               <button
-                onClick={proceed}
-                disabled={navigating || orderingClosed}
+                onClick={timing.action === 'checkout' ? proceed : () => setPreorderOpen(true)}
+                disabled={navigating}
                 data-cart-footer='1'
                 className='flex h-14 w-full items-center gap-3.5 rounded-2xl bg-primary px-2 text-base font-extrabold text-selected-text transition hover:-translate-y-0.5 hover:brightness-95 hover:shadow-[0_12px_26px_-8px_rgba(0,0,0,0.55)] active:scale-[0.99] disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none'>
                 {navigating ? (
@@ -301,15 +306,23 @@ export default function Cart({ isOpen: controlledIsOpen, onOpenChange, recommend
                 ) : (
                   <>
                     <span className='flex h-8 min-w-[30px] items-center justify-center rounded-[10px] bg-black px-[9px] text-sm font-extrabold text-white'>{totalItems}</span>
-                    <span className='flex-1 text-left'>{orderingClosed ? (t.storeClosedNow ?? t.closed) : t.goToCheckout}</span>
+                    <span className='flex-1 text-left'>{timing.action === 'newTime' ? t.chooseNewTime : timing.action === 'preorder' ? t.preorder : t.goToCheckout}</span>
                     <span className='pr-3'>{formatPrice(totalPrice)}</span>
                   </>
                 )}
               </button>
-              {orderingClosed && (
-                <p className='mt-2.5 text-center text-[12.5px] font-semibold text-fg-secondary'>{t.storeClosedCannotOrder}</p>
+              {timing.notice && <p className='mt-2.5 text-center text-[12.5px] font-semibold text-fg-secondary'>{timing.notice}</p>}
+              {!timing.notice && timing.slotLabel && (
+                <p className='mt-2.5 text-center text-[12.5px] font-semibold text-fg-secondary'>
+                  {t.preorderedFor} {timing.slotLabel} ·{' '}
+                  <button onClick={() => setPreorderOpen(true)} className='font-bold text-white hover:underline'>
+                    {t.edit}
+                  </button>
+                </p>
               )}
             </div>
+            {/* Nested in the cart's popup, so picking a time does not count as a click outside the cart. */}
+            <PreorderModal open={preorderOpen} onClose={() => setPreorderOpen(false)} onConfirm={timing.saveSlot} onStandard={timing.clearSlot} />
           </Dialog.Popup>
         </Dialog.Viewport>
       </Dialog.Portal>

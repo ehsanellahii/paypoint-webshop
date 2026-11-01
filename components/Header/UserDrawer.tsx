@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { X, Heart, ShoppingBag, MessageSquare, Globe, Shield, FileText, Info, LogOut, ChevronRight, User, ArrowLeft, Check, Phone, Mail } from 'lucide-react';
+import { X, Heart, ShoppingBag, MessageSquare, Globe, Shield, Info, LogOut, ChevronRight, User, ArrowLeft, Check, Phone, Mail } from 'lucide-react';
 import { useUser } from '~/contexts/user-context';
 import AuthenticationDialog from '../dialogs/Authentication/AuthenticationDialog';
 import FavoritesPanel from '../dialogs/FavoriteItems/FavoritesPanel';
@@ -14,6 +14,7 @@ import { useIsMobile } from '~/contexts/device-context';
 import MobileAccountDrawer from '~/components/mobile/MobileAccountDrawer';
 import { useStore } from '~/contexts/store-context';
 import { useStoreNavigation } from '~/hooks/useStoreNavigation';
+import { useRouter } from 'next/navigation';
 import { getPlacedOrder } from '~/lib/lastOrder';
 
 type Props = {
@@ -81,7 +82,13 @@ function DesktopUserDrawer({ open, onClose }: Props) {
 
   const [view, setView] = useState<View>('home');
   const [liveOrder, setLiveOrder] = useState(false);
-  const { toMenu } = useStoreNavigation();
+  const { base, withToken, toMenu } = useStoreNavigation();
+  const router = useRouter();
+  /* Imprint and privacy policy are pages of their own, on both trees. */
+  const openLegal = (page: 'impressum' | 'datenschutz') => {
+    onClose();
+    router.push(withToken(`${base}/${page}`));
+  };
   const [dialogs, setDialogs] = useState({ login: false, register: false, singleProductDetails: false });
   const [selectedProduct, setSelectedProduct] = useState<MenuProduct | null>(null);
 
@@ -267,11 +274,10 @@ function DesktopUserDrawer({ open, onClose }: Props) {
               {/* Legal */}
               <div className='mb-2.5 mt-6 text-[12px] font-extrabold uppercase tracking-[0.06em] text-muted-foreground'>{t.legal ?? 'Legal'}</div>
               <div className='overflow-hidden rounded-2xl bg-surface-3'>
-                <Row icon={Shield} label={t.privacy ?? 'Privacy'} onClick={onClose} />
+                {/* The restaurant's own pages. No terms row: the shop has no terms of its own to show. */}
+                <Row icon={Shield} label={t.privacy ?? 'Privacy'} onClick={() => openLegal('datenschutz')} />
                 <div className='ml-[51px] h-px bg-white/[0.06]' />
-                <Row icon={FileText} label={t.terms ?? 'Terms'} onClick={onClose} />
-                <div className='ml-[51px] h-px bg-white/[0.06]' />
-                <Row icon={Info} label={t.imprint ?? 'Imprint'} onClick={onClose} />
+                <Row icon={Info} label={t.imprint ?? 'Imprint'} onClick={() => openLegal('impressum')} />
               </div>
 
               {/* Account */}

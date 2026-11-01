@@ -104,6 +104,7 @@ export default function DeliveryAddressModal({ open, onClose, onSelect, googleAp
   const { t } = useLanguage();
   const storeInfo = useStore();
   const { deliveryAddress, savedAddresses, saveAddress, removeSavedAddress, setOrderType, rememberDeliveryZone } = useAddress();
+  const pickupAvailable = storeInfo?.settings?.orderTypes?.takeaway !== false;
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   // 'list' shows the address book, 'form' the search + save flow. The sheet
@@ -505,16 +506,19 @@ export default function DeliveryAddressModal({ open, onClose, onSelect, googleAp
             <div className='px-[18px] py-[17px]'>
               <div className='text-[14.5px] font-bold text-white'>{t.outsideDeliveryArea}</div>
               <div className='mt-1.5 text-[13px] font-medium leading-relaxed text-muted-foreground'>{t.outsideDeliveryAreaSub}</div>
-              <div className='mt-3.5 flex flex-wrap gap-2.5'>
-                <button
-                  type='button'
-                  onClick={() => {
-                    setOrderType('pickup');
-                    onClose();
-                  }}
-                  className='inline-flex h-[42px] items-center gap-2 rounded-xl bg-primary px-4 text-[13.5px] font-bold text-selected-text transition active:scale-[0.97]'>
-                  {t.switchToPickup}
-                </button>
+              <div className={cn('flex flex-wrap gap-2.5', (pickupAvailable || storeInfo?.phone) && 'mt-3.5')}>
+                {/* Only where the store takes pickup orders — otherwise it would switch to a mode the shop refuses. */}
+                {pickupAvailable && (
+                  <button
+                    type='button'
+                    onClick={() => {
+                      setOrderType('pickup');
+                      onClose();
+                    }}
+                    className='inline-flex h-[42px] items-center gap-2 rounded-xl bg-primary px-4 text-[13.5px] font-bold text-selected-text transition active:scale-[0.97]'>
+                    {t.switchToPickup}
+                  </button>
+                )}
                 {storeInfo?.phone && (
                   <a
                     href={`tel:${storeInfo.phone}`}

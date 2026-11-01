@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, ChevronRight, FileText, Globe, Heart, Info, LogOut, Mail, MessageSquare, Phone, Shield, ShoppingBag, ShoppingCart, Ticket, X } from 'lucide-react';
+import { Check, ChevronRight, Globe, Heart, Info, LogOut, Mail, MessageSquare, Phone, Shield, ShoppingBag, ShoppingCart, Ticket, X } from 'lucide-react';
 
 import MobileSheet, { SheetDivider, SheetGroup } from '~/components/mobile/MobileSheet';
 import AuthenticationDialog from '~/components/dialogs/Authentication/AuthenticationDialog';
@@ -10,6 +10,7 @@ import { useLanguage } from '~/contexts/language-context';
 import { useStore } from '~/contexts/store-context';
 import { useUser } from '~/contexts/user-context';
 import { useStoreNavigation } from '~/hooks/useStoreNavigation';
+import { useRouter } from 'next/navigation';
 import { cn } from '~/lib/utils';
 
 const LANGUAGES: { code: 'de' | 'en'; name: string; sub: string; flag: string }[] = [
@@ -67,7 +68,13 @@ export default function MobileAccountDrawer({ open, onClose }: { open: boolean; 
   const { t, language, setLanguage } = useLanguage();
   const { user, clearUser } = useUser();
   const storeInfo = useStore();
-  const { toAccount, toCart } = useStoreNavigation();
+  const { base, withToken, toAccount, toCart } = useStoreNavigation();
+  const router = useRouter();
+  /* Imprint and privacy policy are pages of their own, on both trees. */
+  const openLegal = (page: 'impressum' | 'datenschutz') => {
+    onClose();
+    router.push(withToken(`${base}/${page}`));
+  };
 
   const [sheet, setSheet] = useState<'none' | 'support' | 'lang' | 'logout'>('none');
   const [loginOpen, setLoginOpen] = useState(false);
@@ -156,11 +163,10 @@ export default function MobileAccountDrawer({ open, onClose }: { open: boolean; 
 
           <SectionLabel className='mt-6'>{t.legal ?? 'Legal'}</SectionLabel>
           <SheetGroup>
-            <Row icon={Shield} label={t.privacy ?? 'Privacy'} onClick={onClose} />
+            {/* The restaurant's own pages. No terms row: the shop has no terms of its own to show. */}
+            <Row icon={Shield} label={t.privacy ?? 'Privacy'} onClick={() => openLegal('datenschutz')} />
             <SheetDivider />
-            <Row icon={FileText} label={t.terms ?? 'Terms'} onClick={onClose} />
-            <SheetDivider />
-            <Row icon={Info} label={t.imprint ?? 'Imprint'} onClick={onClose} />
+            <Row icon={Info} label={t.imprint ?? 'Imprint'} onClick={() => openLegal('impressum')} />
           </SheetGroup>
 
           {isLoggedIn && (

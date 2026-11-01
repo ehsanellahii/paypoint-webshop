@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { Language, translations, Translations } from '@/lib/i18n';
 import { storage } from '@/lib/utils';
 
@@ -24,6 +24,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     setLanguageState(lang);
     storage.set(STORAGE_KEY, lang);
   };
+
+  // The layout renders <html lang="de">; follow the guest's choice so screen readers and translators read the right language.
+  useEffect(() => {
+    document.documentElement.lang = language;
+  }, [language]);
 
   const value: LanguageContextType = {
     language,
