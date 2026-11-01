@@ -201,15 +201,23 @@ export default function ProductModal({ product, isOpen, onClose }: ProductModalP
                         return (
                           <button
                             key={sku._id}
-                            className={`flex min-w-[112px] flex-col items-start gap-0.5 rounded-[14px] border px-3.5 py-2.5 text-left transition-colors ${
-                              isSelected ? 'border-accent bg-accent/10' : 'border-white/12 bg-white/5 hover:bg-white/10'
+                            /*
+                              Selected = filled in the store colour with its text colour
+                              (standard: white with black text), like every other chosen
+                              state in the shop. It used `border-accent`, but `--accent` is
+                              a dark grey (#26262a), so the chosen size looked the same as
+                              the others and guests thought the tap did nothing.
+                            */
+                            className={`flex min-w-[112px] flex-col items-start gap-0.5 rounded-[14px] border-2 px-3.5 py-2.5 text-left transition-colors ${
+                              isSelected ? 'border-primary bg-primary text-selected-text' : 'border-white/12 bg-white/5 hover:bg-white/10'
                             } ${sku.available ? '' : 'cursor-not-allowed opacity-45'}`}
                             disabled={!sku.available}
+                            aria-pressed={isSelected}
                             type='button'
                             onClick={() => setSelectedSkuId(sku._id)}
                           >
                             <span className='text-[14.5px] font-extrabold'>{sku.name ?? product.name}</span>
-                            <span className='text-[13px] font-semibold text-fg-soft'>
+                            <span className={cn('text-[13px] font-semibold', isSelected ? 'text-selected-text/70' : 'text-fg-soft')}>
                               {sku.available ? formatPrice(sku.price) : t.notAvailable}
                             </span>
                           </button>
