@@ -14,8 +14,9 @@ import { storage } from '~/lib/utils';
  * the conditions for raising it do not.
  *
  * Shown when the store offers delivery, no address is chosen yet, the visit
- * isn't dine-in (a seated guest is already at the restaurant), and the gate
- * hasn't been dismissed for this store before.
+ * isn't dine-in (a seated guest is already at the restaurant — also one who
+ * came from a table sticker with `?s=`), and the gate hasn't been dismissed
+ * for this store before.
  */
 export function useZoneGate() {
   const storeInfo = useStore();
@@ -27,9 +28,15 @@ export function useZoneGate() {
     const slug = storeInfo.slug || 'default';
     const deliveryAvailable = storeInfo.settings?.orderTypes?.delivery;
     const isDineIn = !!storeInfo.tableInfo?.token;
+    // `?s=`: a QR sticker on a table that leads to no table right now — the
+    // guest is sitting in the restaurant and picks the table (web shop 0005).
+    let fromSticker = false;
+    try {
+      fromSticker = new URLSearchParams(window.location.search).has('s');
+    } catch {}
     const seen = storage.get<boolean>(`pos-intro-seen:${slug}`, false);
     // localStorage is only readable after mount, so the decision cannot be made during render.
-    if (deliveryAvailable && !isDineIn && !deliveryAddress && !seen) setShowGate(true);
+    if (deliveryAvailable && !isDineIn && !fromSticker && !deliveryAddress && !seen) setShowGate(true);
     // Deliberately keyed on the store alone: once dismissed, setting an address
     // must not re-evaluate and flash the gate back.
     // eslint-disable-next-line react-hooks/exhaustive-deps

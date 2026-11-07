@@ -317,6 +317,16 @@ export interface Translations {
   tableTokenInvalidTitle: string;
   tableTokenInvalidSub: string;
   dismiss: string;
+  /** A QR sticker that leads to no table right now: the guest picks it (web shop 0005). "{n}" is the table number. */
+  tablePickerTitle: string;
+  tablePickerSub: string;
+  tablePickerArea: string;
+  tablePickerTable: string;
+  tablePickerChoose: string;
+  tablePickerConfirm: string;
+  tablePickerSkip: string;
+  tablePickerError: string;
+  tablePickerNone: string;
   /** Cart: a pre-order slot that passed while the shop is closed (pick a new one), and the way to pre-order when closed. */
   preorderSlotPassedPickNew: string;
   chooseNewTime: string;
@@ -793,6 +803,15 @@ export const translations: Record<Language, Translations> = {
     tableTokenInvalidTitle: 'This table code is no longer valid.',
     tableTokenInvalidSub: 'Please ask the staff for the current QR code – you can still place an order.',
     dismiss: 'Dismiss',
+    tablePickerTitle: 'Which table are you at?',
+    tablePickerSub: 'This QR code is not linked to a table right now. Pick your table and your order goes straight there.',
+    tablePickerArea: 'Area',
+    tablePickerTable: 'Table',
+    tablePickerChoose: 'Choose your table',
+    tablePickerConfirm: 'Continue at table {n}',
+    tablePickerSkip: 'Continue without a table',
+    tablePickerError: 'That did not work. Please try again or ask the staff.',
+    tablePickerNone: 'This QR code does not lead to a table right now. Please ask the staff – you can still order without a table.',
     preorderSlotPassedPickNew: 'The chosen time has passed – please pick a new one.',
     chooseNewTime: 'Choose a new time',
     storeClosedPreorderHint: 'You can pre-order for later.',
@@ -1256,6 +1275,15 @@ export const translations: Record<Language, Translations> = {
     tableTokenInvalidTitle: 'Dieser Tisch-Code ist nicht mehr gültig.',
     tableTokenInvalidSub: 'Bitte frag das Personal nach dem aktuellen QR-Code – du kannst trotzdem bestellen.',
     dismiss: 'Ausblenden',
+    tablePickerTitle: 'An welchem Tisch sitzt du?',
+    tablePickerSub: 'Dieser QR-Code ist gerade keinem Tisch zugeordnet. Wähle deinen Tisch – deine Bestellung kommt dann direkt dorthin.',
+    tablePickerArea: 'Bereich',
+    tablePickerTable: 'Tisch',
+    tablePickerChoose: 'Tisch wählen',
+    tablePickerConfirm: 'Weiter an Tisch {n}',
+    tablePickerSkip: 'Ohne Tisch weiter',
+    tablePickerError: 'Das hat nicht geklappt. Bitte noch einmal versuchen oder das Personal fragen.',
+    tablePickerNone: 'Dieser QR-Code führt gerade zu keinem Tisch. Bitte frag das Personal – du kannst auch ohne Tisch bestellen.',
     preorderSlotPassedPickNew: 'Die gewählte Zeit ist vorbei – bitte wähle eine neue.',
     chooseNewTime: 'Neue Zeit wählen',
     storeClosedPreorderHint: 'Du kannst für später vorbestellen.',

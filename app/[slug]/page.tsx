@@ -9,6 +9,7 @@ import { buildStoreMetadata } from '~/lib/metadata';
 import ThemeVars from '~/lib/ThemeVars';
 import StoreProvider from '~/contexts/store-context';
 import TableTokenNotice from '~/components/TableTokenNotice';
+import StickerTablePicker from '~/components/StickerTablePicker';
 
 // export const dynamic = 'force-dynamic';
 // export const revalidate = 0;
@@ -34,8 +35,13 @@ const page = async ({ params, searchParams }: { params: Promise<{ slug: string }
   const paramsResult = await params;
   const { slug } = paramsResult;
   if (BLOCKEDSLUGS.has(slug)) notFound();
-  const { t: token } = await searchParams;
+  const { t: token, s: stickerParam } = await searchParams;
   const storeInfo = await getStoreData(slug, token as string);
+  /*
+   * `?s=<code>`: a QR sticker that leads to no table right now (server 0056)
+   * — the guest picks the table. Never together with a table token.
+   */
+  const stickerCode = !token && typeof stickerParam === 'string' ? stickerParam.trim().slice(0, 16) : '';
   // No store behind the slug — a 404 page, not an empty shell.
   if (!storeInfo) notFound();
   const primaryColor = storeInfo?.settings?.themeColors?.primaryColor;
@@ -52,6 +58,7 @@ const page = async ({ params, searchParams }: { params: Promise<{ slug: string }
       {device === 'mobile' ? <MobileMenuScreen /> : <HomeScreen />}
       {/* An old or foreign table QR: the shop loaded without the table — say so, without blocking the order. */}
       {storeInfo.tableTokenInvalid && <TableTokenNotice />}
+      {stickerCode && <StickerTablePicker code={stickerCode} />}
     </StoreProvider>
   );
 };
